@@ -1,0 +1,10 @@
+Hi {{ order.customer.get_full_name|default:order.customer.email }},
+
+Your order #{{ order.pk }} has been confirmed and your advance payment of ${{ order.advance_amount }} has been received.
+
+Pickup: {{ order.pickup_date|date:"F j, Y" }}{% if order.pickup_window_start and order.pickup_window_end %}
+Between {{ order.pickup_window_start|time:"g:i A" }} and {{ order.pickup_window_end|time:"g:i A" }}{% endif %}
+
+Remaining balance due at pickup: ${{ order.balance_amount }}
+
+Thank you for your order!

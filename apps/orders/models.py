@@ -51,6 +51,12 @@ class Order(models.Model):
 
     # Financials (all snapshotted at placement)
     order_total = models.DecimalField(max_digits=10, decimal_places=2)
+    tax_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default='0.00',
+        help_text='Total tax snapshotted at order placement (sum of per-line tax).',
+    )
     advance_amount = models.DecimalField(
         max_digits=10,
         decimal_places=2,
@@ -83,6 +89,10 @@ class Order(models.Model):
     class Meta:
         ordering = ['-created_at']
 
+    @property
+    def pre_tax_subtotal(self):
+        return self.order_total - self.tax_amount
+
     def __str__(self):
         return f'Order #{self.pk} — {self.customer} ({self.get_status_display()})'
 
@@ -103,6 +113,7 @@ class Payment(models.Model):
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     gateway = models.CharField(max_length=50, default='stripe')
     gateway_reference = models.CharField(max_length=200, null=True, blank=True)
+    stripe_payment_intent_id = models.CharField(max_length=200, null=True, blank=True)
     status = models.CharField(
         max_length=20,
         choices=PaymentStatus.choices,
@@ -126,6 +137,13 @@ class OrderItem(models.Model):
     nullable for meat and grocery items.
     """
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='items')
+    product = models.ForeignKey(
+        'catalog.Product',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='order_items',
+    )
 
     # Snapshots (immutable after creation)
     product_name = models.CharField(max_length=200)

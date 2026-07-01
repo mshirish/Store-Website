@@ -1,0 +1,21 @@
+<div id="cart-totals" hx-swap-oob="true">
+  {% with count=cart.get_item_count subtotal=cart.get_subtotal %}
+  {% if count == 0 %}
+    <div class="text-center py-10">
+      <p class="text-gray-500 mb-4">Your cart is empty.</p>
+      <a href="{% url 'catalog:home' %}" class="text-sm text-green-700 hover:underline">Continue shopping</a>
+    </div>
+  {% else %}
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+      <div class="flex justify-between text-base font-semibold text-gray-900 mb-4">
+        <span>Subtotal ({{ count }} item{{ count|pluralize }})</span>
+        <span>${{ subtotal }}</span>
+      </div>
+      <a href="{% url 'orders:checkout' %}"
+         class="block w-full text-center bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-xl transition-colors">
+        Proceed to Checkout
+      </a>
+    </div>
+  {% endif %}
+  {% endwith %}
+</div>

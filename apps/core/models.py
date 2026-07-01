@@ -13,15 +13,6 @@ class SiteConfiguration(models.Model):
         default=Decimal('50.00'),
         help_text='Percentage of the order total charged as the advance payment (0–100).',
     )
-    tax_rate = models.DecimalField(
-        max_digits=6,
-        decimal_places=4,
-        default=Decimal('0.0000'),
-        help_text=(
-            'State meal tax rate as a decimal (e.g. 0.0625 for 6.25%). '
-            'Reserved for Phase 3 — not yet applied to order totals.'
-        ),
-    )
 
     class Meta:
         verbose_name = 'Site Configuration'

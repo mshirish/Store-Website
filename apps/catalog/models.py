@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.db import models
 
 
@@ -14,6 +16,12 @@ class Category(models.Model):
     kind = models.CharField(max_length=20, choices=CategoryKind.choices)
     description = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
+    tax_rate = models.DecimalField(
+        max_digits=6,
+        decimal_places=4,
+        default=Decimal('0.0000'),
+        help_text='Tax rate as a decimal (e.g. 0.0625 for 6.25%). Applied per line at checkout.',
+    )
 
     class Meta:
         verbose_name = 'Category'

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Our Store{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 text-gray-800 min-h-screen flex flex-col">
+
+  <!-- Nav -->
+  <nav class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-10">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+      <a href="{% url 'catalog:home' %}" class="text-xl font-bold text-green-700 tracking-tight">Our Store</a>
+      <div class="flex items-center gap-5 text-sm font-medium">
+        <a href="{% url 'catalog:cake_list' %}" class="text-gray-600 hover:text-green-700 transition-colors">Cakes</a>
+        <a href="{% url 'catalog:meat_list' %}" class="text-gray-600 hover:text-green-700 transition-colors">Meat</a>
+        <a href="{% url 'catalog:grocery_list' %}" class="text-gray-600 hover:text-green-700 transition-colors">Grocery</a>
+        <a href="{% url 'catalog:catering_menu' %}" class="text-gray-600 hover:text-green-700 transition-colors">Catering</a>
+        <div class="w-px h-4 bg-gray-200"></div>
+        {% if user.is_authenticated %}
+          <a href="{% url 'cart:cart' %}" class="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-full transition-colors">
+            Cart
+            {% if cart_count > 0 %}
+              <span class="bg-white text-green-700 text-xs font-bold px-1.5 py-0.5 rounded-full leading-none">{{ cart_count }}</span>
+            {% endif %}
+          </a>
+          <a href="{% url 'account_logout' %}" class="text-gray-500 hover:text-gray-700 transition-colors">Sign out</a>
+        {% else %}
+          <a href="{% url 'account_login' %}" class="text-green-700 hover:text-green-800 transition-colors">Sign in</a>
+          <a href="{% url 'account_signup' %}" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-full transition-colors">Sign up</a>
+        {% endif %}
+      </div>
+    </div>
+  </nav>
+
+  <!-- Flash messages -->
+  {% if messages %}
+  <div class="max-w-6xl mx-auto px-4 pt-4 w-full space-y-2">
+    {% for message in messages %}
+    <div class="px-4 py-3 rounded-lg text-sm border
+      {% if 'error' in message.tags %}bg-red-50 border-red-200 text-red-800
+      {% elif 'warning' in message.tags %}bg-amber-50 border-amber-200 text-amber-800
+      {% elif 'success' in message.tags %}bg-green-50 border-green-200 text-green-800
+      {% else %}bg-blue-50 border-blue-200 text-blue-800{% endif %}">
+      {{ message }}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- Content -->
+  <main class="flex-1 max-w-6xl mx-auto px-4 py-8 w-full">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-white border-t border-gray-200 mt-auto">
+    <div class="max-w-6xl mx-auto px-4 py-5 text-center text-sm text-gray-400">
+      &copy; {% now "Y" %} Our Store
+    </div>
+  </footer>
+
+  <script src="https://unpkg.com/htmx.org@1.9.12/dist/htmx.min.js"></script>
+  <script>
+    document.body.addEventListener('htmx:configRequest', function (evt) {
+      evt.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';
+    });
+  </script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

@@ -16,9 +16,9 @@ from .models import (
 
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
-    list_display = ('name', 'kind', 'is_active')
+    list_display = ('name', 'kind', 'tax_rate', 'is_active')
     list_filter = ('kind', 'is_active')
-    list_editable = ('is_active',)
+    list_editable = ('is_active', 'tax_rate')
     search_fields = ('name',)
 
 

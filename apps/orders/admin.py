@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.utils import timezone
 
-from .models import Order, OrderItem, Payment, OrderStatus, STATUS_TRANSITIONS
+from .models import Order, OrderItem, Payment, OrderStatus, PaymentStatus, STATUS_TRANSITIONS
 
 
 # ── Inlines ───────────────────────────────────────────────────────────────────
@@ -11,6 +11,7 @@ class OrderItemInline(admin.TabularInline):
     extra = 0
     can_delete = False
     readonly_fields = (
+        'product',
         'product_name',
         'unit_price_snapshot',
         'quantity',
@@ -37,6 +38,7 @@ class PaymentInline(admin.TabularInline):
         'amount',
         'gateway',
         'gateway_reference',
+        'stripe_payment_intent_id',
         'status',
         'created_at',
         'captured_at',
@@ -50,11 +52,17 @@ class PaymentInline(admin.TabularInline):
 
 @admin.action(description='Advance order status (one step forward)')
 def advance_status(modeladmin, request, queryset):
+    from apps.orders.emails import send_order_ready_email
     for order in queryset:
         next_status = STATUS_TRANSITIONS.get(order.status)
         if next_status:
             order.status = next_status
             order.save(update_fields=['status', 'updated_at'])
+            if next_status == OrderStatus.READY:
+                try:
+                    send_order_ready_email(order)
+                except Exception:
+                    pass
 
 
 @admin.action(description='Mark balance as paid (offline cash/card)')
@@ -100,6 +108,7 @@ class OrderAdmin(admin.ModelAdmin):
     readonly_fields = (
         'customer',
         'order_total',
+        'tax_amount',
         'advance_amount',
         'balance_amount',
         'pickup_window_start',
@@ -119,7 +128,7 @@ class OrderAdmin(admin.ModelAdmin):
             'fields': ('pickup_date', 'pickup_window_start', 'pickup_window_end'),
         }),
         ('Financials', {
-            'fields': ('order_total', 'advance_amount', 'balance_amount'),
+            'fields': ('order_total', 'tax_amount', 'advance_amount', 'balance_amount'),
         }),
         ('Offline Balance Payment', {
             'fields': ('balance_paid_at', 'balance_paid_by'),
@@ -135,3 +144,13 @@ class OrderAdmin(admin.ModelAdmin):
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('customer', 'balance_paid_by')
+
+    def delete_queryset(self, request, queryset):
+        for order in queryset.filter(status=OrderStatus.AWAITING_PAYMENT):
+            order.payments.filter(status=PaymentStatus.PENDING).delete()
+        super().delete_queryset(request, queryset)
+
+    def delete_model(self, request, obj):
+        if obj.status == OrderStatus.AWAITING_PAYMENT:
+            obj.payments.filter(status=PaymentStatus.PENDING).delete()
+        super().delete_model(request, obj)

@@ -1,0 +1,153 @@
+{% extends 'base.html' %}
+{% block title %}{{ product.name }} — Our Store{% endblock %}
+{% block content %}
+<div class="mb-4">
+  <a href="{% url 'catalog:catering_menu' %}" class="text-sm text-green-700 hover:underline">&larr; Back to Catering Menu</a>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
+  <div>
+    {% if product.image %}
+      <img src="{{ product.image.url }}" alt="{{ product.name }}" class="w-full rounded-2xl object-cover max-h-80">
+    {% else %}
+      <div class="w-full h-72 bg-amber-50 rounded-2xl flex items-center justify-center text-amber-200 text-7xl font-light">T</div>
+    {% endif %}
+  </div>
+
+  <div>
+    <h1 class="text-3xl font-bold text-gray-900 mb-2">{{ product.name }}</h1>
+    <p class="text-sm text-gray-500 mb-1">{{ product.section }}</p>
+    {% if product.description %}
+      <p class="text-gray-500 mb-6">{{ product.description }}</p>
+    {% endif %}
+
+    {% if product.inquiry_only %}
+      <div class="bg-amber-50 border border-amber-200 rounded-xl p-5 text-amber-800">
+        <p class="font-semibold mb-1">Inquiry Only</p>
+        <p class="text-sm">This item is not available for direct online ordering. Please call or ask in store for pricing and availability.</p>
+      </div>
+
+    {% else %}
+    {% if user.is_authenticated %}
+    <form method="post" action="{% url 'cart:add' product.pk %}">
+      {% csrf_token %}
+
+      <!-- Option/Tier -->
+      <div class="mb-5">
+        <label class="block text-sm font-semibold text-gray-700 mb-2">Option / Tier</label>
+        <select name="option_label" id="option-select" required
+                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
+          <option value="">— Select an option —</option>
+          {% for option in options %}
+          <option value="{{ option.label }}">
+            {{ option.label }}{% if option.serves_note %} ({{ option.serves_note }}){% endif %} — ${{ option.price }}{% if option.pricing_mode == 'by_weight' %}/lb{% endif %}
+          </option>
+          {% endfor %}
+        </select>
+        <p class="text-xl font-bold text-green-700 mt-2" id="price-display"></p>
+      </div>
+
+      <!-- Weight (shown only for BY_WEIGHT options) -->
+      <div class="mb-5 hidden" id="weight-section">
+        <label class="block text-sm font-semibold text-gray-700 mb-2">Weight (lbs)</label>
+        <div class="flex items-center gap-3">
+          <input type="number" name="weight" id="weight-input" min="0.001" step="0.001"
+                 placeholder="e.g. 2.5"
+                 class="w-36 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
+          <span class="text-sm text-gray-500">lb</span>
+        </div>
+        <p class="text-base font-bold text-green-700 mt-2">
+          Total: <span id="weight-total">&mdash;</span>
+        </p>
+      </div>
+
+      <!-- Quantity (shown only for BY_TRAY options) -->
+      <div class="mb-5 hidden" id="qty-section">
+        <label class="block text-sm font-semibold text-gray-700 mb-2">Quantity</label>
+        <input type="number" name="quantity" id="qty-input" value="1" min="1" step="1"
+               class="w-24 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
+      </div>
+
+      <!-- Variant (if product has variants) -->
+      {% if variants %}
+      <div class="mb-5">
+        <label class="block text-sm font-semibold text-gray-700 mb-2">Choice</label>
+        <select name="variant" required
+                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
+          <option value="">— Select —</option>
+          {% for variant in variants %}
+          <option value="{{ variant.label }}">{{ variant.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
+
+      <!-- Special requests -->
+      <div class="mb-6">
+        <label class="block text-sm font-semibold text-gray-700 mb-1">
+          Special requests <span class="font-normal text-gray-400">(optional)</span>
+        </label>
+        <textarea name="catering_special_requests" rows="2"
+                  placeholder="Dietary requirements, notes, etc."
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"></textarea>
+      </div>
+
+      <button type="submit"
+              class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-xl transition-colors">
+        Add to Cart
+      </button>
+    </form>
+    {% else %}
+    <a href="{% url 'account_login' %}?next={{ request.path }}"
+       class="inline-block w-full text-center bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-xl transition-colors">
+      Sign in to order
+    </a>
+    {% endif %}
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const optionsData = {{ options_json|safe }};
+  const optionSelect = document.getElementById('option-select');
+  const weightSection = document.getElementById('weight-section');
+  const qtySection = document.getElementById('qty-section');
+  const priceDisplay = document.getElementById('price-display');
+  const weightInput = document.getElementById('weight-input');
+  const weightTotal = document.getElementById('weight-total');
+
+  function updateForm() {
+    const label = optionSelect ? optionSelect.value : '';
+    const opt = optionsData.find(o => o.label === label);
+    if (!opt) {
+      if (weightSection) weightSection.classList.add('hidden');
+      if (qtySection) qtySection.classList.add('hidden');
+      if (priceDisplay) priceDisplay.textContent = '';
+      return;
+    }
+    const price = parseFloat(opt.price);
+    if (opt.pricing_mode === 'by_weight') {
+      if (weightSection) weightSection.classList.remove('hidden');
+      if (qtySection) qtySection.classList.add('hidden');
+      if (priceDisplay) priceDisplay.textContent = '$' + price.toFixed(2) + '/lb';
+    } else {
+      if (weightSection) weightSection.classList.add('hidden');
+      if (qtySection) qtySection.classList.remove('hidden');
+      if (priceDisplay) priceDisplay.textContent = '$' + price.toFixed(2);
+    }
+  }
+
+  if (optionSelect) optionSelect.addEventListener('change', updateForm);
+
+  if (weightInput && weightTotal) {
+    weightInput.addEventListener('input', function () {
+      const opt = optionsData.find(o => o.label === (optionSelect ? optionSelect.value : ''));
+      if (!opt) return;
+      const w = parseFloat(this.value);
+      weightTotal.textContent = w > 0 ? '$' + (w * parseFloat(opt.price)).toFixed(2) : '—';
+    });
+  }
+</script>
+{% endblock %}

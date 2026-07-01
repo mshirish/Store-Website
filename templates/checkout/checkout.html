@@ -1,0 +1,154 @@
+{% extends 'base.html' %}
+{% block title %}Checkout — Our Store{% endblock %}
+{% block content %}
+<h1 class="text-3xl font-bold text-gray-900 mb-8">Checkout</h1>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+  <!-- Left: form -->
+  <div class="lg:col-span-2 space-y-6">
+
+    <!-- Pickup date -->
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+      <h2 class="text-lg font-semibold text-gray-900 mb-4">Pickup Date</h2>
+
+      <form method="post" action="{% url 'orders:place' %}" id="checkout-form">
+        {% csrf_token %}
+
+        <div class="mb-2">
+          <label class="block text-sm font-semibold text-gray-700 mb-2" for="pickup-date">
+            Select a pickup date
+          </label>
+          <input type="date" name="pickup_date" id="pickup-date" required
+                 min="{{ earliest_pickup }}"
+                 hx-get="{% url 'orders:pickup_window' %}"
+                 hx-trigger="change"
+                 hx-target="#pickup-window-display"
+                 hx-include="[name='pickup_date']"
+                 class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
+          <p class="text-xs text-gray-400 mt-1">Earliest available: {{ earliest_pickup }}</p>
+        </div>
+
+        <div id="pickup-window-display" class="min-h-[2.5rem]"></div>
+      </form>
+
+      {% if not earliest_pickup %}
+      <p class="text-sm text-red-600 mt-2">No available pickup dates found in the next 60 days. Please contact us.</p>
+      {% endif %}
+    </div>
+
+    <!-- Contact info -->
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+      <h2 class="text-lg font-semibold text-gray-900 mb-4">Contact Information</h2>
+      <p class="text-sm text-gray-500 mb-4">
+        Ordering as <strong>{{ user.get_full_name|default:user.email }}</strong> ({{ user.email }})
+      </p>
+
+      <div class="mb-4">
+        <label class="block text-sm font-semibold text-gray-700 mb-2" for="contact-phone">
+          Phone number <span class="font-normal text-gray-400">(recommended for catering orders)</span>
+        </label>
+        <input type="tel" name="contact_phone" id="contact-phone" form="checkout-form"
+               value="{{ contact_phone|default:'' }}"
+               placeholder="e.g. (555) 123-4567"
+               class="w-full max-w-xs border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
+      </div>
+
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-2" for="notes">
+          Order notes <span class="font-normal text-gray-400">(optional)</span>
+        </label>
+        <textarea name="notes" id="notes" form="checkout-form" rows="2"
+                  placeholder="Any overall notes for this order"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"></textarea>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Right: order summary -->
+  <div class="space-y-4">
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+      <h2 class="text-lg font-semibold text-gray-900 mb-4">Order Summary</h2>
+
+      <div class="space-y-3 mb-4">
+        {% for item in items %}
+        <div class="flex justify-between text-sm">
+          <div class="flex-1 min-w-0 mr-3">
+            <span class="font-medium text-gray-800">{{ item.product_name }}</span>
+            {% if item.kind == 'cake' %}
+              <span class="text-gray-400 text-xs ml-1">{{ item.cake_size }}{% if item.cake_flavor_name %}, {{ item.cake_flavor_name }}{% endif %}</span>
+            {% elif item.kind == 'meat' %}
+              <span class="text-gray-400 text-xs ml-1">{{ item.quantity|floatformat:"-3" }} lb</span>
+            {% elif item.kind == 'catering' %}
+              <span class="text-gray-400 text-xs ml-1">{{ item.catering_option_label }}
+                {% if item.catering_pricing_mode == 'by_weight' %}({{ item.quantity|floatformat:"-3" }} lb){% endif %}
+              </span>
+            {% elif item.kind == 'grocery' %}
+              <span class="text-gray-400 text-xs ml-1">x{{ item.quantity|floatformat:0 }}</span>
+            {% endif %}
+          </div>
+          <span class="font-medium text-gray-900 whitespace-nowrap">${{ item.line_total }}</span>
+        </div>
+        {% endfor %}
+      </div>
+
+      <div class="border-t border-gray-100 pt-3 space-y-2">
+        <div class="flex justify-between text-sm text-gray-600">
+          <span>Subtotal</span>
+          <span>${{ pre_tax_subtotal }}</span>
+        </div>
+        {% if tax_amount %}
+        <div class="flex justify-between text-sm text-gray-600">
+          <span>Tax</span>
+          <span>${{ tax_amount }}</span>
+        </div>
+        {% endif %}
+        <div class="flex justify-between text-sm font-semibold text-gray-900 border-t border-gray-100 pt-2">
+          <span>Order Total</span>
+          <span>${{ order_total }}</span>
+        </div>
+        <div class="flex justify-between text-sm text-gray-600">
+          <span>Advance due ({{ config.advance_percentage }}%)</span>
+          <span class="font-medium">${{ advance_amount }}</span>
+        </div>
+        <div class="flex justify-between text-sm text-gray-600">
+          <span>Balance at pickup</span>
+          <span>${{ balance_amount }}</span>
+        </div>
+      </div>
+    </div>
+
+    <p class="text-xs text-gray-400 text-center px-2">
+      You'll pay the advance amount on the confirmation page.
+    </p>
+
+    <button type="submit" form="checkout-form"
+            class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-xl transition-colors">
+      Place Order
+    </button>
+
+    <a href="{% url 'cart:cart' %}" class="block text-center text-sm text-gray-500 hover:text-gray-700">
+      &larr; Back to cart
+    </a>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const invalidDates = {{ invalid_dates_json|safe }};
+  const dateInput = document.getElementById('pickup-date');
+  if (dateInput) {
+    dateInput.addEventListener('change', function () {
+      if (invalidDates.includes(this.value)) {
+        this.setCustomValidity('The store is closed on this date. Please choose another.');
+        this.reportValidity();
+      } else {
+        this.setCustomValidity('');
+      }
+    });
+  }
+</script>
+{% endblock %}

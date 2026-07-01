@@ -4,6 +4,7 @@ Pickup-window logic.
 Public API:
     get_pickup_window(pickup_date, today=None) -> tuple[time, time] | None
     get_next_open_day(from_date=None)          -> date | None
+    is_open_on_date(date)                      -> bool
 """
 from __future__ import annotations
 
@@ -91,3 +92,8 @@ def get_pickup_window(
         open_time = max(open_time, READINESS_FLOOR)
 
     return open_time, close_time
+
+
+def is_open_on_date(date: datetime.date) -> bool:
+    """Returns True if the store is open on the given date (any hours)."""
+    return _get_base_hours(date) is not None

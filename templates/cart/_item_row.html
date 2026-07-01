@@ -1,0 +1,94 @@
+<tr id="item-{{ item.pk }}" class="border-b border-gray-100 last:border-0">
+  <!-- Product info -->
+  <td class="py-4 pr-4">
+    <div class="font-medium text-gray-900">{{ item.product_name }}</div>
+    {% if item.kind == 'cake' %}
+      <div class="text-xs text-gray-500 mt-0.5">
+        {{ item.cake_size }}
+        {% if item.cake_flavor_name %} &middot; {{ item.cake_flavor_name }}{% endif %}
+        {% if item.cake_inscription %} &middot; &ldquo;{{ item.cake_inscription }}&rdquo;{% endif %}
+      </div>
+    {% elif item.kind == 'catering' %}
+      <div class="text-xs text-gray-500 mt-0.5">
+        {{ item.catering_option_label }}
+        {% if item.catering_serves_note %}
+          <span class="text-gray-400"> &middot; {{ item.catering_serves_note }}</span>
+        {% endif %}
+        {% if item.catering_variant_choice %} &middot; {{ item.catering_variant_choice }}{% endif %}
+      </div>
+    {% endif %}
+    <div class="text-xs text-gray-400 mt-0.5">
+      ${{ item.unit_price_snapshot }}{% if item.is_by_weight %}/lb{% endif %}
+    </div>
+  </td>
+
+  <!-- Quantity / weight -->
+  <td class="py-4 pr-4 w-44">
+    {% if item.kind == 'cake' %}
+      <span class="text-sm text-gray-600">Qty: 1</span>
+    {% elif item.kind == 'meat' %}
+      <form hx-post="{% url 'cart:update' item.pk %}"
+            hx-target="#item-{{ item.pk }}"
+            hx-swap="outerHTML"
+            class="flex items-center gap-2">
+        {% csrf_token %}
+        <input type="number" name="weight" value="{{ item.quantity|floatformat:-3 }}"
+               min="0.001" step="0.001"
+               class="w-20 border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
+        <span class="text-xs text-gray-500">lb</span>
+        <button type="submit" class="text-xs text-green-700 hover:text-green-800 font-medium">Update</button>
+      </form>
+    {% elif item.kind == 'grocery' %}
+      <form hx-post="{% url 'cart:update' item.pk %}"
+            hx-target="#item-{{ item.pk }}"
+            hx-swap="outerHTML"
+            class="flex items-center gap-2">
+        {% csrf_token %}
+        <input type="number" name="quantity" value="{{ item.quantity|floatformat:0 }}"
+               min="1" step="1"
+               class="w-16 border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
+        <button type="submit" class="text-xs text-green-700 hover:text-green-800 font-medium">Update</button>
+      </form>
+    {% elif item.kind == 'catering' %}
+      {% if item.catering_pricing_mode == 'by_weight' %}
+        <form hx-post="{% url 'cart:update' item.pk %}"
+              hx-target="#item-{{ item.pk }}"
+              hx-swap="outerHTML"
+              class="flex items-center gap-2">
+          {% csrf_token %}
+          <input type="number" name="weight" value="{{ item.quantity|floatformat:-3 }}"
+                 min="0.001" step="0.001"
+                 class="w-20 border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
+          <span class="text-xs text-gray-500">lb</span>
+          <button type="submit" class="text-xs text-green-700 hover:text-green-800 font-medium">Update</button>
+        </form>
+      {% else %}
+        <form hx-post="{% url 'cart:update' item.pk %}"
+              hx-target="#item-{{ item.pk }}"
+              hx-swap="outerHTML"
+              class="flex items-center gap-2">
+          {% csrf_token %}
+          <input type="number" name="quantity" value="{{ item.quantity|floatformat:0 }}"
+                 min="1" step="1"
+                 class="w-16 border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
+          <button type="submit" class="text-xs text-green-700 hover:text-green-800 font-medium">Update</button>
+        </form>
+      {% endif %}
+    {% endif %}
+  </td>
+
+  <!-- Line total -->
+  <td class="py-4 pr-4 text-right font-semibold text-gray-900 whitespace-nowrap">
+    ${{ item.line_total }}
+  </td>
+
+  <!-- Remove -->
+  <td class="py-4 text-right">
+    <form hx-post="{% url 'cart:remove' item.pk %}"
+          hx-target="#item-{{ item.pk }}"
+          hx-swap="delete">
+      {% csrf_token %}
+      <button type="submit" class="text-xs text-red-500 hover:text-red-700 font-medium">Remove</button>
+    </form>
+  </td>
+</tr>
