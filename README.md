@@ -48,7 +48,10 @@ Edit `.env` and fill in real values:
 | `DEBUG` | `True` for local dev, `False` in production |
 | `ALLOWED_HOSTS` | Comma-separated hostnames, e.g. `localhost,127.0.0.1` |
 | `DATABASE_URL` | `postgres://store_user:yourpassword@localhost:5432/store_db` |
-| `EMAIL_BACKEND` | `django.core.mail.backends.console.EmailBackend` for dev (emails print to terminal) |
+| `EMAIL_HOST` | SMTP host (leave blank to print emails to the terminal in dev) |
+| `STRIPE_PUBLISHABLE_KEY` | Test publishable key from Stripe Dashboard |
+| `STRIPE_SECRET_KEY` | Test secret key from Stripe Dashboard |
+| `STRIPE_WEBHOOK_SECRET` | `whsec_...` from `stripe listen` output (see below) |
 
 ### 4. Run migrations
 
@@ -83,17 +86,93 @@ python manage.py runserver
 
 ---
 
+## Testing Stripe payments locally
+
+Stripe webhooks cannot reach `localhost` directly, so you need the Stripe CLI to
+forward events to your local server.
+
+### 1. Install the Stripe CLI
+
+Download from <https://docs.stripe.com/stripe-cli> and follow the instructions
+for your OS. Verify with:
+
+```bash
+stripe --version
+```
+
+### 2. Log in
+
+```bash
+stripe login
+```
+
+Follow the browser prompt to authorise the CLI with your Stripe account.
+
+### 3. Forward webhooks to your local server
+
+In a **separate terminal** (keep your Django server running in another):
+
+```bash
+stripe listen --forward-to localhost:8000/webhook/stripe/
+```
+
+The CLI prints a signing secret on startup, e.g.:
+
+```
+> Ready! Your webhook signing secret is whsec_abc123...
+```
+
+Copy that value into your `.env`:
+
+```
+STRIPE_WEBHOOK_SECRET=whsec_abc123...
+```
+
+Restart Django if it is already running.
+
+### 4. Place a test order and pay
+
+1. Sign in, add items to cart, and proceed through checkout.
+2. On the confirmation page click **Pay $X Advance**.
+3. On the Stripe-hosted page use the test card:
+   - Number: `4242 4242 4242 4242`
+   - Expiry: any future date (e.g. `12/34`)
+   - CVC: any 3 digits
+4. After payment, Stripe redirects you to the success page and the CLI terminal
+   logs the `checkout.session.completed` event being forwarded.
+5. Refresh the confirmation page — status should change to **Confirmed** and a
+   confirmation email should appear in the terminal (or your inbox if SMTP is
+   configured).
+
+### Other test cards
+
+| Scenario | Card number |
+|---|---|
+| Payment requires 3D Secure | `4000 0025 0000 3155` |
+| Card declined | `4000 0000 0000 9995` |
+
+Full list: <https://docs.stripe.com/testing>
+
+---
+
 ## Project structure
 
 ```
 config/         Django project package (settings, urls, wsgi)
 apps/
   accounts/     Custom User model (email login via django-allauth)
-  catalog/      Categories, products (cake / meat / grocery), flavors, size prices
+  catalog/      Categories (with per-category tax_rate), products, flavors, size prices
   core/         SiteConfiguration, StoreHours, StoreClosure, pickup-window logic
-  orders/       Order, OrderItem, Payment
-templates/      Base templates (populated in Phase 2)
-static/         Static assets (populated in Phase 2)
+  cart/         DB-backed cart (one per user)
+  orders/       Order, OrderItem, Payment, Stripe webhook handler
+templates/
+  base.html
+  cart/
+  catalog/
+  checkout/     checkout.html, confirmation.html, _pickup_window.html
+  orders/       payment_success.html, payment_cancel.html
+  emails/       Transactional email templates (txt)
+static/         Static assets
 ```
 
 ---
@@ -105,4 +184,11 @@ source .venv/bin/activate   # or .venv\Scripts\activate on Windows
 python manage.py runserver
 ```
 
-Verification emails are printed to the terminal console in dev. Copy the link to confirm a new account.
+In a second terminal (for payment testing):
+
+```bash
+stripe listen --forward-to localhost:8000/webhook/stripe/
+```
+
+Verification and transactional emails are printed to the terminal console
+when `EMAIL_HOST` is not set in `.env`.
