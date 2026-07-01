@@ -102,7 +102,46 @@ def _get_current_price_from_order_item(item):
     return None
 
 
+# ── Helpers (continued) ───────────────────────────────────────────────────────
+
+def _annotate_items(queryset):
+    """Attach ._kind to each OrderItem for template branching."""
+    items = list(queryset.select_related('product__category'))
+    for item in items:
+        if item.cake_size or item.cake_flavor_name:
+            item._kind = CategoryKind.CAKE
+        elif item.catering_option_label:
+            item._kind = CategoryKind.CATERING
+        else:
+            kind = None
+            if item.product_id:
+                try:
+                    kind = item.product.category.kind
+                except Exception:
+                    pass
+            item._kind = kind or CategoryKind.GROCERY
+    return items
+
+
 # ── Views ─────────────────────────────────────────────────────────────────────
+
+@login_required
+def order_list(request):
+    orders = Order.objects.filter(customer=request.user).order_by('-created_at')
+    return render(request, 'orders/order_list.html', {'orders': orders})
+
+
+@login_required
+def order_detail(request, pk):
+    order = get_object_or_404(Order, pk=pk, customer=request.user)
+    items = _annotate_items(order.items.all())
+    return render(request, 'orders/order_detail.html', {
+        'order': order,
+        'items': items,
+        'just_placed': request.GET.get('just_placed') == '1',
+        'just_paid': request.GET.get('just_paid') == '1',
+    })
+
 
 @login_required
 def checkout(request):
@@ -282,14 +321,13 @@ def place_order(request):
             )
         cart.items.all().delete()
 
-    return redirect('orders:confirmation', pk=order.pk)
+    return redirect(reverse('orders:order_detail', kwargs={'pk': order.pk}) + '?just_placed=1')
 
 
 @login_required
 def order_confirmation(request, pk):
     order = get_object_or_404(Order, pk=pk, customer=request.user)
-    items = order.items.all()
-    return render(request, 'checkout/confirmation.html', {'order': order, 'items': items})
+    return redirect(reverse('orders:order_detail', kwargs={'pk': pk}) + '?just_placed=1')
 
 
 @login_required
@@ -301,11 +339,11 @@ def initiate_payment(request, pk):
 
     if order.status != OrderStatus.AWAITING_PAYMENT:
         messages.info(request, 'This order has already been paid or cancelled.')
-        return redirect('orders:confirmation', pk=order.pk)
+        return redirect('orders:order_detail', pk=order.pk)
 
     if order.payments.filter(status=PaymentStatus.CAPTURED).exists():
         messages.info(request, 'Payment already received for this order.')
-        return redirect('orders:confirmation', pk=order.pk)
+        return redirect('orders:order_detail', pk=order.pk)
 
     # Re-validate items via product FK (price or availability may have changed since order was placed)
     order_items = list(order.items.select_related('product__category'))
@@ -325,7 +363,7 @@ def initiate_payment(request, pk):
     if errors:
         for err in errors:
             messages.error(request, err)
-        return redirect('orders:confirmation', pk=order.pk)
+        return redirect('orders:order_detail', pk=order.pk)
 
     stripe_lib.api_key = settings.STRIPE_SECRET_KEY
 
@@ -376,7 +414,7 @@ def initiate_payment(request, pk):
 @login_required
 def payment_success(request, pk):
     order = get_object_or_404(Order, pk=pk, customer=request.user)
-    return render(request, 'orders/payment_success.html', {'order': order})
+    return redirect(reverse('orders:order_detail', kwargs={'pk': pk}) + '?just_paid=1')
 
 
 @login_required

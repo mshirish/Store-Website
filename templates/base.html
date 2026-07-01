@@ -20,6 +20,7 @@
         <a href="{% url 'catalog:catering_menu' %}" class="text-gray-600 hover:text-green-700 transition-colors">Catering</a>
         <div class="w-px h-4 bg-gray-200"></div>
         {% if user.is_authenticated %}
+          <a href="{% url 'orders:order_list' %}" class="text-gray-600 hover:text-green-700 transition-colors">My Orders</a>
           <a href="{% url 'cart:cart' %}" class="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-full transition-colors">
             Cart
             <span id="cart-badge" style="display:contents">{% if cart_count > 0 %}<span class="bg-white text-green-700 text-xs font-bold px-1.5 py-0.5 rounded-full leading-none">{{ cart_count }}</span>{% endif %}</span>

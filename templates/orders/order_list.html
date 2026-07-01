@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% block title %}My Orders — Our Store{% endblock %}
+{% block content %}
+<div class="max-w-3xl mx-auto">
+
+  <h1 class="text-2xl font-bold text-gray-900 mb-6">My Orders</h1>
+
+  {% if orders %}
+  <div class="space-y-3">
+    {% for order in orders %}
+    <a href="{% url 'orders:order_detail' pk=order.pk %}"
+       class="block bg-white rounded-2xl border border-gray-100 shadow-sm p-5 hover:border-green-300 hover:shadow-md transition-all">
+
+      <div class="flex items-center justify-between gap-4">
+        <div>
+          <span class="font-semibold text-gray-900">Order #{{ order.pk }}</span>
+          <span class="text-sm text-gray-400 ml-2">{{ order.created_at|date:"M j, Y" }}</span>
+        </div>
+        {% if order.status == 'awaiting_payment' %}
+          <span class="inline-block bg-amber-100 text-amber-700 text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap">{{ order.get_status_display }}</span>
+        {% elif order.status == 'confirmed' %}
+          <span class="inline-block bg-green-100 text-green-700 text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap">{{ order.get_status_display }}</span>
+        {% elif order.status == 'preparing' %}
+          <span class="inline-block bg-blue-100 text-blue-700 text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap">{{ order.get_status_display }}</span>
+        {% elif order.status == 'ready' %}
+          <span class="inline-block bg-green-600 text-white text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap">{{ order.get_status_display }}</span>
+        {% elif order.status == 'completed' %}
+          <span class="inline-block bg-gray-100 text-gray-600 text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap">{{ order.get_status_display }}</span>
+        {% elif order.status == 'cancelled' %}
+          <span class="inline-block bg-red-100 text-red-700 text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap">{{ order.get_status_display }}</span>
+        {% endif %}
+      </div>
+
+      <div class="mt-2 flex items-center justify-between text-sm">
+        <span class="text-gray-500">Pickup {{ order.pickup_date|date:"M j, Y" }}</span>
+        <span class="font-semibold text-gray-900">${{ order.order_total }}</span>
+      </div>
+
+      {% if order.status == 'awaiting_payment' %}
+      <p class="mt-2 text-xs font-semibold text-amber-700">
+        Advance of ${{ order.advance_amount }} required — tap to pay
+      </p>
+      {% endif %}
+
+    </a>
+    {% endfor %}
+  </div>
+
+  {% else %}
+  <div class="text-center py-20 text-gray-400">
+    <p class="text-xl mb-3">No orders yet</p>
+    <a href="{% url 'catalog:home' %}" class="text-green-700 hover:underline text-sm">Browse our menu</a>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}
