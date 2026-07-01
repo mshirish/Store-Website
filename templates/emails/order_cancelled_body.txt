@@ -1,0 +1,9 @@
+Hi {{ order.customer.get_full_name|default:order.customer.email }},
+
+We're writing to let you know that your order #{{ order.pk }} (scheduled for pickup on {{ order.pickup_date|date:"F j, Y" }}) has been cancelled.
+{% if advance_captured %}
+You had already paid an advance of ${{ order.advance_amount }} for this order. A member of our team will be in touch shortly regarding your refund or to discuss alternative options.
+{% endif %}
+We apologize for the inconvenience. Please don't hesitate to contact us if you have any questions.
+
+Our Store
