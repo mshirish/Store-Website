@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+{% block title %}Sign In — Our Store{% endblock %}
+
+{% block extra_head %}
+<style>
+  .auth-form label { display:block; font-size:.875rem; font-weight:600; color:#374151; margin-bottom:.25rem; }
+  .auth-form input[type=email],.auth-form input[type=password],.auth-form input[type=text] {
+    display:block; width:100%; border:1px solid #d1d5db; border-radius:.5rem;
+    padding:.5rem .75rem; font-size:.875rem; outline:none; }
+  .auth-form input[type=email]:focus,.auth-form input[type=password]:focus,.auth-form input[type=text]:focus {
+    border-color:#16a34a; box-shadow:0 0 0 2px rgba(22,163,74,.25); }
+  .auth-form input[type=checkbox] { width:1rem; height:1rem; vertical-align:middle; margin-right:.375rem; }
+  .auth-form ul.errorlist { list-style:none; margin:.25rem 0 0; padding:0; }
+  .auth-form ul.errorlist li { color:#dc2626; font-size:.75rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-md mx-auto">
+  <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-8">
+    <h1 class="text-2xl font-bold text-gray-900 mb-6">Sign In</h1>
+
+    {% if form.non_field_errors %}
+    <div class="mb-5 bg-red-50 border border-red-200 rounded-lg p-3">
+      {% for error in form.non_field_errors %}
+        <p class="text-red-700 text-sm">{{ error }}</p>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <form method="post" class="auth-form">
+      {% csrf_token %}
+      {% if redirect_field_value %}
+        <input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}">
+      {% endif %}
+
+      {% for field in form %}
+      <div class="mb-4">
+        {{ field.label_tag }}
+        {{ field }}
+        {{ field.errors }}
+      </div>
+      {% endfor %}
+
+      <button type="submit"
+              class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-xl transition-colors mt-2">
+        Sign In
+      </button>
+    </form>
+
+    <div class="mt-6 space-y-2 text-center text-sm">
+      <p class="text-gray-500">
+        No account?
+        <a href="{% url 'account_signup' %}" class="text-green-700 hover:underline font-medium">Sign up</a>
+      </p>
+      <p>
+        <a href="{% url 'account_reset_password' %}" class="text-gray-400 hover:text-gray-600 text-xs">
+          Forgot your password?
+        </a>
+      </p>
+    </div>
+  </div>
+</div>
+{% endblock %}

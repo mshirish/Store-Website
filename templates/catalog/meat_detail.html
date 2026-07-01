@@ -22,7 +22,9 @@
     {% endif %}
 
     {% if user.is_authenticated %}
-    <form method="post" action="{% url 'cart:add' product.pk %}">
+    <form method="post" action="{% url 'cart:add' product.pk %}"
+          hx-post="{% url 'cart:add' product.pk %}"
+          hx-swap="none">
       {% csrf_token %}
 
       <div class="mb-5">

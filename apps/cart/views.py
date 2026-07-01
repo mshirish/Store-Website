@@ -1,3 +1,4 @@
+import json
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 
 from django.contrib import messages
@@ -43,12 +44,20 @@ def cart_detail(request):
 
 # ── Add to cart ───────────────────────────────────────────────────────────────
 
+def _toast_response(toast_type, message, extra_html=''):
+    """Return a minimal HTMX response that fires a showToast event (+ optional OOB HTML)."""
+    r = HttpResponse(extra_html)
+    r['HX-Trigger'] = json.dumps({'showToast': {'type': toast_type, 'message': message}})
+    return r
+
+
 @login_required
 @require_POST
 def add_to_cart(request, product_pk):
     from apps.catalog.models import Product
     product = get_object_or_404(Product.objects.select_related('category'), pk=product_pk)
     kind = product.category.kind
+    is_htmx = bool(request.headers.get('HX-Request'))
 
     try:
         if kind == CategoryKind.CAKE:
@@ -60,14 +69,26 @@ def add_to_cart(request, product_pk):
         elif kind == CategoryKind.CATERING:
             item_data = _build_catering_item(request, product)
         else:
+            if is_htmx:
+                return _toast_response('error', 'Unknown product type.')
             messages.error(request, 'Unknown product type.')
             return redirect(request.META.get('HTTP_REFERER', '/'))
     except ValidationError as exc:
+        if is_htmx:
+            return _toast_response('error', exc.message)
         messages.error(request, exc.message)
         return redirect(request.META.get('HTTP_REFERER', '/'))
 
     cart = _get_or_create_cart(request.user)
     CartItem.objects.create(cart=cart, product=product, kind=kind, **item_data)
+
+    if is_htmx:
+        badge_html = render_to_string(
+            'cart/_cart_badge.html',
+            {'cart_count': cart.get_item_count()},
+        )
+        return _toast_response('success', f'"{product.name}" added to your cart.', badge_html)
+
     messages.success(request, f'"{product.name}" added to your cart.')
     return redirect('cart:cart')
 
