@@ -119,6 +119,20 @@
   const priceDisplay = document.getElementById('price-display');
   const weightInput = document.getElementById('weight-input');
   const weightTotal = document.getElementById('weight-total');
+  const qtyInput = document.getElementById('qty-input');
+
+  function updateQtyTotal() {
+    const label = optionSelect ? optionSelect.value : '';
+    const opt = optionsData.find(o => o.label === label);
+    if (!opt || opt.pricing_mode === 'by_weight') return;
+    const q = parseInt(qtyInput ? qtyInput.value : '1', 10);
+    const price = parseFloat(opt.price);
+    if (priceDisplay) {
+      priceDisplay.textContent = (q > 1)
+        ? q + ' × $' + price.toFixed(2) + ' = $' + (q * price).toFixed(2)
+        : '$' + price.toFixed(2);
+    }
+  }
 
   function updateForm() {
     const label = optionSelect ? optionSelect.value : '';
@@ -137,11 +151,12 @@
     } else {
       if (weightSection) weightSection.classList.add('hidden');
       if (qtySection) qtySection.classList.remove('hidden');
-      if (priceDisplay) priceDisplay.textContent = '$' + price.toFixed(2);
+      updateQtyTotal();
     }
   }
 
   if (optionSelect) optionSelect.addEventListener('change', updateForm);
+  if (qtyInput) qtyInput.addEventListener('input', updateQtyTotal);
 
   if (weightInput && weightTotal) {
     weightInput.addEventListener('input', function () {

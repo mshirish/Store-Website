@@ -11,24 +11,80 @@
 
   <!-- Nav -->
   <nav class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-10">
-    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-      <a href="{% url 'catalog:home' %}" class="text-xl font-bold text-green-700 tracking-tight">Our Store</a>
-      <div class="flex items-center gap-5 text-sm font-medium">
-        <a href="{% url 'catalog:cake_list' %}" class="text-gray-600 hover:text-green-700 transition-colors">Cakes</a>
-        <a href="{% url 'catalog:meat_list' %}" class="text-gray-600 hover:text-green-700 transition-colors">Meat</a>
-        <a href="{% url 'catalog:grocery_list' %}" class="text-gray-600 hover:text-green-700 transition-colors">Grocery</a>
-        <a href="{% url 'catalog:catering_menu' %}" class="text-gray-600 hover:text-green-700 transition-colors">Catering</a>
-        <div class="w-px h-4 bg-gray-200"></div>
-        {% if user.is_authenticated %}
-          <a href="{% url 'orders:order_list' %}" class="text-gray-600 hover:text-green-700 transition-colors">My Orders</a>
-          <a href="{% url 'cart:cart' %}" class="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-full transition-colors">
+    <div class="max-w-6xl mx-auto px-4">
+      <div class="flex items-center justify-between py-3 gap-3">
+
+        <!-- Logo -->
+        <a href="{% url 'catalog:home' %}" class="text-xl font-bold text-green-700 tracking-tight shrink-0">Our Store</a>
+
+        <!-- Right-side controls -->
+        <div class="flex items-center gap-3">
+
+          <!-- Desktop nav links (md+) -->
+          <div class="hidden md:flex items-center gap-5 text-sm font-medium">
+            <a href="{% url 'catalog:cake_list' %}" class="text-gray-600 hover:text-green-700 transition-colors">Cakes</a>
+            <a href="{% url 'catalog:meat_list' %}" class="text-gray-600 hover:text-green-700 transition-colors">Meat</a>
+            <a href="{% url 'catalog:grocery_list' %}" class="text-gray-600 hover:text-green-700 transition-colors">Grocery</a>
+            <a href="{% url 'catalog:catering_menu' %}" class="text-gray-600 hover:text-green-700 transition-colors">Catering</a>
+            {% if user.is_authenticated %}
+              <div class="w-px h-4 bg-gray-200"></div>
+              <a href="{% url 'orders:order_list' %}" class="text-gray-600 hover:text-green-700 transition-colors">My Orders</a>
+            {% endif %}
+          </div>
+
+          <!-- Cart — always visible on all screen sizes so #cart-badge stays in DOM for HTMX OOB swap -->
+          {% if user.is_authenticated %}
+          <a href="{% url 'cart:cart' %}" class="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-full transition-colors text-sm font-medium">
             Cart
             <span id="cart-badge" style="display:contents">{% if cart_count > 0 %}<span class="bg-white text-green-700 text-xs font-bold px-1.5 py-0.5 rounded-full leading-none">{{ cart_count }}</span>{% endif %}</span>
           </a>
-          <a href="{% url 'account_logout' %}" class="text-gray-500 hover:text-gray-700 transition-colors">Sign out</a>
+          {% endif %}
+
+          <!-- Desktop-only auth links (md+) -->
+          <div class="hidden md:flex items-center gap-3 text-sm font-medium">
+            {% if user.is_authenticated %}
+              <a href="{% url 'account_logout' %}" class="text-gray-500 hover:text-gray-700 transition-colors">Sign out</a>
+            {% else %}
+              <a href="{% url 'account_login' %}?next={{ request.path }}" class="text-green-700 hover:text-green-800 transition-colors">Sign in</a>
+              <a href="{% url 'account_signup' %}" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-full transition-colors">Sign up</a>
+            {% endif %}
+          </div>
+
+          <!-- Hamburger button (below md only) -->
+          <button id="nav-toggle" aria-label="Open navigation" aria-expanded="false"
+                  class="md:hidden p-2 -mr-1 text-gray-600 hover:text-green-700 rounded-lg hover:bg-gray-50 transition-colors">
+            <svg id="nav-icon-open" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+            </svg>
+            <svg id="nav-icon-close" class="w-6 h-6 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+
+        </div>
+      </div>
+
+      <!-- Mobile dropdown (below md, hidden until toggled) -->
+      <div id="nav-menu" class="hidden md:hidden border-t border-gray-100 py-2 space-y-0.5">
+        <a href="{% url 'catalog:cake_list' %}"
+           class="block px-3 py-2.5 text-sm font-medium text-gray-700 hover:text-green-700 hover:bg-green-50 rounded-lg transition-colors">Cakes</a>
+        <a href="{% url 'catalog:meat_list' %}"
+           class="block px-3 py-2.5 text-sm font-medium text-gray-700 hover:text-green-700 hover:bg-green-50 rounded-lg transition-colors">Meat</a>
+        <a href="{% url 'catalog:grocery_list' %}"
+           class="block px-3 py-2.5 text-sm font-medium text-gray-700 hover:text-green-700 hover:bg-green-50 rounded-lg transition-colors">Grocery</a>
+        <a href="{% url 'catalog:catering_menu' %}"
+           class="block px-3 py-2.5 text-sm font-medium text-gray-700 hover:text-green-700 hover:bg-green-50 rounded-lg transition-colors">Catering</a>
+        <div class="my-1 border-t border-gray-100"></div>
+        {% if user.is_authenticated %}
+          <a href="{% url 'orders:order_list' %}"
+             class="block px-3 py-2.5 text-sm font-medium text-gray-700 hover:text-green-700 hover:bg-green-50 rounded-lg transition-colors">My Orders</a>
+          <a href="{% url 'account_logout' %}"
+             class="block px-3 py-2.5 text-sm font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-lg transition-colors">Sign out</a>
         {% else %}
-          <a href="{% url 'account_login' %}?next={{ request.path }}" class="text-green-700 hover:text-green-800 transition-colors">Sign in</a>
-          <a href="{% url 'account_signup' %}" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-full transition-colors">Sign up</a>
+          <a href="{% url 'account_login' %}?next={{ request.path }}"
+             class="block px-3 py-2.5 text-sm font-medium text-green-700 hover:text-green-800 hover:bg-green-50 rounded-lg transition-colors">Sign in</a>
+          <a href="{% url 'account_signup' %}"
+             class="block px-3 py-2.5 text-sm font-medium text-green-700 hover:text-green-800 hover:bg-green-50 rounded-lg transition-colors">Sign up</a>
         {% endif %}
       </div>
     </div>
@@ -67,6 +123,34 @@
 
   <script src="https://unpkg.com/htmx.org@1.9.12/dist/htmx.min.js"></script>
   <script>
+    // Hamburger menu toggle
+    (function () {
+      var toggle = document.getElementById('nav-toggle');
+      var menu = document.getElementById('nav-menu');
+      var iconOpen = document.getElementById('nav-icon-open');
+      var iconClose = document.getElementById('nav-icon-close');
+      if (!toggle || !menu) return;
+      function openMenu() {
+        menu.classList.remove('hidden');
+        iconOpen.classList.add('hidden');
+        iconClose.classList.remove('hidden');
+        toggle.setAttribute('aria-expanded', 'true');
+      }
+      function closeMenu() {
+        menu.classList.add('hidden');
+        iconOpen.classList.remove('hidden');
+        iconClose.classList.add('hidden');
+        toggle.setAttribute('aria-expanded', 'false');
+      }
+      toggle.addEventListener('click', function () {
+        menu.classList.contains('hidden') ? openMenu() : closeMenu();
+      });
+      // Close when any link inside the dropdown is tapped
+      menu.querySelectorAll('a').forEach(function (link) {
+        link.addEventListener('click', closeMenu);
+      });
+    })();
+
     document.body.addEventListener('htmx:configRequest', function (evt) {
       evt.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';
     });

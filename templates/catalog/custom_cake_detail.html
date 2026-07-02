@@ -83,7 +83,7 @@
       <!-- Quantity -->
       <div class="mb-5">
         <label class="block text-sm font-semibold text-gray-700 mb-2">Quantity</label>
-        <input type="number" name="quantity" value="1" min="1" step="1" required
+        <input type="number" name="quantity" id="qty-input" value="1" min="1" step="1" required
                class="w-24 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
       </div>
 
@@ -125,11 +125,21 @@
   const sizeData = {{ sizes_json|safe }};
   const select = document.getElementById('size-select');
   const display = document.getElementById('price-display');
+  const qtyInput = document.getElementById('qty-input');
 
   function updatePrice() {
     const price = sizeData[select.value];
-    display.textContent = price ? '$' + parseFloat(price).toFixed(2) : '—';
+    const q = parseInt(qtyInput ? qtyInput.value : '1', 10) || 1;
+    if (price) {
+      const unitPrice = parseFloat(price);
+      display.textContent = q > 1
+        ? q + ' × $' + unitPrice.toFixed(2) + ' = $' + (q * unitPrice).toFixed(2)
+        : '$' + unitPrice.toFixed(2);
+    } else {
+      display.textContent = '—';
+    }
   }
   select.addEventListener('change', updatePrice);
+  if (qtyInput) qtyInput.addEventListener('input', updatePrice);
 </script>
 {% endblock %}
