@@ -6,6 +6,7 @@
       <div class="text-xs text-gray-500 mt-0.5">
         {{ item.cake_size }}
         {% if item.cake_flavor_name %} &middot; {{ item.cake_flavor_name }}{% endif %}
+        {% for opt in item.custom_options_list %} &middot; {{ opt.choice }}{% endfor %}
         {% if item.cake_inscription %} &middot; &ldquo;{{ item.cake_inscription }}&rdquo;{% endif %}
       </div>
     {% elif item.kind == 'catering' %}
@@ -25,7 +26,7 @@
   <!-- Quantity / weight -->
   <td class="py-4 pr-4 w-44">
     {% if item.kind == 'cake' %}
-      <span class="text-sm text-gray-600">Qty: 1</span>
+      <span class="text-sm text-gray-600">Qty: {{ item.quantity|floatformat:0 }}</span>
     {% elif item.kind == 'meat' %}
       <form hx-post="{% url 'cart:update' item.pk %}"
             hx-target="#item-{{ item.pk }}"

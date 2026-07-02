@@ -56,6 +56,10 @@ class CartItem(models.Model):
     catering_variant_choice = models.CharField(max_length=100, null=True, blank=True)  # snapshot
     catering_special_requests = models.TextField(blank=True)
 
+    # Custom-cake-specific (blank for all other kinds)
+    # JSON list of {group, choice} dicts, e.g. [{"group": "Fruit Topping", "choice": "Strawberry"}]
+    custom_options_snapshot = models.TextField(blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -75,3 +79,13 @@ class CartItem(models.Model):
         return self.kind == 'meat' or (
             self.kind == 'catering' and self.catering_pricing_mode == 'by_weight'
         )
+
+    @property
+    def custom_options_list(self):
+        import json
+        if self.custom_options_snapshot:
+            try:
+                return json.loads(self.custom_options_snapshot)
+            except (ValueError, TypeError):
+                return []
+        return []

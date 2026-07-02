@@ -11,6 +11,7 @@ from django.views.decorators.http import require_POST
 
 from apps.catalog.models import (
     CakeFlavor,
+    CakeOptionGroup,
     CakeSizePrice,
     CateringProduct,
     CategoryKind,
@@ -61,7 +62,14 @@ def add_to_cart(request, product_pk):
 
     try:
         if kind == CategoryKind.CAKE:
-            item_data = _build_cake_item(request, product)
+            try:
+                is_custom = product.cakeproduct.is_custom
+            except Exception:
+                is_custom = False
+            if is_custom:
+                item_data = _build_custom_cake_item(request, product)
+            else:
+                item_data = _build_cake_item(request, product)
         elif kind == CategoryKind.MEAT:
             item_data = _build_meat_item(request, product)
         elif kind == CategoryKind.GROCERY:
@@ -234,6 +242,54 @@ def _build_grocery_item(request, product):
         'product_name': product.name,
         'unit_price_snapshot': grocery.unit_price,
         'quantity': Decimal(qty),
+    }
+
+
+def _build_custom_cake_item(request, product):
+    if not product.is_available:
+        raise ValidationError('This product is not available.')
+    try:
+        cake = product.cakeproduct
+    except Exception:
+        raise ValidationError('Invalid product type.')
+
+    size = request.POST.get('size', '').strip()
+    try:
+        size_price = cake.size_prices.get(size=size)
+    except CakeSizePrice.DoesNotExist:
+        raise ValidationError('Please select a valid size.')
+
+    flavor_name = request.POST.get('flavor_name', '').strip()
+    if not flavor_name or not CakeFlavor.objects.filter(name=flavor_name, is_active=True).exists():
+        raise ValidationError('Please select a valid flavor.')
+
+    try:
+        qty = int(request.POST.get('quantity', '1').strip())
+        if qty <= 0:
+            raise ValueError()
+    except (ValueError, TypeError):
+        raise ValidationError('Please enter a valid quantity (whole number ≥ 1).')
+
+    groups = CakeOptionGroup.objects.prefetch_related('choices').order_by('display_order', 'name')
+    selections = []
+    for group in groups:
+        choice_label = request.POST.get(f'option_group_{group.pk}', '').strip()
+        if choice_label:
+            if not group.choices.filter(label=choice_label, is_available=True).exists():
+                raise ValidationError(f'Invalid choice for {group.name}.')
+            selections.append({'group': group.name, 'choice': choice_label})
+        elif group.required:
+            raise ValidationError(f'Please select an option for {group.name}.')
+
+    return {
+        'product_name': product.name,
+        'unit_price_snapshot': size_price.price,
+        'quantity': Decimal(qty),
+        'cake_size': size,
+        'cake_flavor_name': flavor_name,
+        'cake_inscription': request.POST.get('cake_inscription', '').strip(),
+        'cake_special_requests': request.POST.get('cake_special_requests', '').strip(),
+        'custom_options_snapshot': json.dumps(selections) if selections else '',
     }
 
 

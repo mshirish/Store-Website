@@ -314,6 +314,7 @@ def place_order(request):
                 cake_flavor_name=item.cake_flavor_name or '',
                 cake_inscription=item.cake_inscription,
                 cake_special_requests=item.cake_special_requests,
+                custom_options_snapshot=item.custom_options_snapshot,
                 catering_option_label=item.catering_option_label or '',
                 catering_serves_note=item.catering_serves_note or '',
                 catering_variant_choice=item.catering_variant_choice or '',

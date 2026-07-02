@@ -3,6 +3,8 @@ from django.contrib import admin
 from .models import (
     Category,
     CakeFlavor,
+    CakeOptionGroup,
+    CakeOptionChoice,
     CakeProduct,
     CakeSizePrice,
     MeatProduct,
@@ -121,3 +123,19 @@ class CateringProductAdmin(admin.ModelAdmin):
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('category', 'section')
+
+
+# ── Custom Cake Options ───────────────────────────────────────────────────────
+
+class CakeOptionChoiceInline(admin.TabularInline):
+    model = CakeOptionChoice
+    extra = 1
+    fields = ('label', 'display_order', 'is_available')
+
+
+@admin.register(CakeOptionGroup)
+class CakeOptionGroupAdmin(admin.ModelAdmin):
+    list_display = ('name', 'display_order', 'required')
+    list_editable = ('display_order', 'required')
+    ordering = ('display_order', 'name')
+    inlines = [CakeOptionChoiceInline]

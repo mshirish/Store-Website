@@ -86,10 +86,14 @@ class CakeSize(models.TextChoices):
 
 class CakeProduct(Product):
     """
-    Cake pricing is by size only (Phase 1). Flavors are drawn from the global
-    CakeFlavor table — no per-product flavor restriction.
-    Custom cakes are a future phase; this model is the extension point.
+    Cake pricing is by size only. Flavors are drawn from the global CakeFlavor table.
+    is_custom=True marks the single "Custom Cake" configurator entry (seeded, not
+    admin-created); it is filtered out of the regular cake grid and shown separately.
     """
+    is_custom = models.BooleanField(
+        default=False,
+        help_text='Marks the single custom cake configurator product. Do not create more than one.',
+    )
 
     class Meta:
         verbose_name = 'Cake Product'
@@ -237,3 +241,46 @@ class CateringVariant(models.Model):
 
     def __str__(self):
         return f'{self.catering_product.name} — {self.label}'
+
+
+# ── Custom Cake Options ───────────────────────────────────────────────────────
+
+class CakeOptionGroup(models.Model):
+    """
+    Admin-editable category of customisation for the custom cake configurator
+    (e.g. "Fruit Topping", "Outer Layer"). required=True forces the customer to
+    pick a choice before adding to cart.
+    """
+    name = models.CharField(max_length=100, unique=True)
+    display_order = models.PositiveIntegerField(default=0)
+    required = models.BooleanField(
+        default=False,
+        help_text='If True, customer must select a choice for this group.',
+    )
+
+    class Meta:
+        ordering = ['display_order', 'name']
+        verbose_name = 'Cake Option Group'
+        verbose_name_plural = 'Cake Option Groups'
+
+    def __str__(self):
+        return self.name
+
+
+class CakeOptionChoice(models.Model):
+    """A single selectable choice within a CakeOptionGroup."""
+    group = models.ForeignKey(
+        CakeOptionGroup,
+        on_delete=models.CASCADE,
+        related_name='choices',
+    )
+    label = models.CharField(max_length=100)
+    display_order = models.PositiveIntegerField(default=0)
+    is_available = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['display_order', 'label']
+        unique_together = ('group', 'label')
+
+    def __str__(self):
+        return f'{self.group.name} — {self.label}'

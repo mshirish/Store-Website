@@ -9,6 +9,8 @@ Seeds:
   - SiteConfiguration singleton
   - CateringSection (10 sections)
   - CateringProduct / CateringOption / CateringVariant (full menu)
+  - Custom Cake product (with default size prices)
+  - CakeOptionGroup / CakeOptionChoice (Fruit Topping, Outer Layer)
 
 After seeding, any items requiring owner confirmation are printed as warnings.
 """
@@ -315,6 +317,8 @@ class Command(BaseCommand):
         self._seed_site_config()
         self._seed_catering_sections()
         flagged = self._seed_catering_products()
+        self._seed_custom_cake()
+        self._seed_cake_option_groups()
         self.stdout.write(self.style.SUCCESS('Done.'))
 
         if flagged:
@@ -393,8 +397,7 @@ class Command(BaseCommand):
 
         config = SiteConfiguration.get()
         self.stdout.write(
-            f'  [config] SiteConfiguration ready '
-            f'(advance: {config.advance_percentage}%, tax_rate: {config.tax_rate})'
+            f'  [config] SiteConfiguration ready (advance: {config.advance_percentage}%)'
         )
 
     # ── Catering sections ─────────────────────────────────────────────────────
@@ -476,3 +479,84 @@ class Command(BaseCommand):
                 flagged_messages.append(flag)
 
         return flagged_messages
+
+    # ── Custom Cake product ───────────────────────────────────────────────────
+
+    def _seed_custom_cake(self):
+        from apps.catalog.models import Category, CategoryKind, CakeProduct, CakeSizePrice, CakeSize
+
+        cake_category = Category.objects.filter(kind=CategoryKind.CAKE).first()
+        if not cake_category:
+            self.stdout.write(self.style.ERROR(
+                '  [custom_cake] No CAKE category found — run seed after _seed_categories.'
+            ))
+            return
+
+        product, created = CakeProduct.objects.get_or_create(
+            is_custom=True,
+            defaults={
+                'name': 'Custom Cake',
+                'category': cake_category,
+                'description': (
+                    'Design your own cake. Choose your size, flavor, and optional toppings — '
+                    'add an inscription or any special requests.'
+                ),
+                'is_available': True,
+            },
+        )
+        if created:
+            self.stdout.write('  [custom_cake] Created: Custom Cake')
+
+        # Default size prices — admin can adjust these freely in the dashboard.
+        default_prices = [
+            (CakeSize.SIX_INCH,   Decimal('30.00')),
+            (CakeSize.EIGHT_INCH,  Decimal('45.00')),
+            (CakeSize.NINE_INCH,   Decimal('55.00')),
+            (CakeSize.TEN_INCH,    Decimal('65.00')),
+        ]
+        for size, price in default_prices:
+            _, sp_created = CakeSizePrice.objects.get_or_create(
+                cake_product=product,
+                size=size,
+                defaults={'price': price},
+            )
+            if sp_created:
+                self.stdout.write(f'    [size_price] {size}: ${price}')
+
+    # ── Cake option groups ────────────────────────────────────────────────────
+
+    def _seed_cake_option_groups(self):
+        from apps.catalog.models import CakeOptionGroup, CakeOptionChoice
+
+        groups_data = [
+            ('Fruit Topping', 10, False, [
+                ('Strawberry',   0),
+                ('Blueberry',    1),
+                ('Raspberry',    2),
+                ('Mixed Fruit',  3),
+                ('No Fruit',     4),
+            ]),
+            ('Outer Layer', 20, False, [
+                ('Whipped Cream',  0),
+                ('Fondant',        1),
+                ('Buttercream',    2),
+                ('No Preference',  3),
+            ]),
+        ]
+
+        for group_name, display_order, required, choices in groups_data:
+            group, created = CakeOptionGroup.objects.get_or_create(
+                name=group_name,
+                defaults={'display_order': display_order, 'required': required},
+            )
+            if created:
+                self.stdout.write(f'  [option_group] Created: {group_name}')
+
+            for label, choice_order in choices:
+                _, c_created = CakeOptionChoice.objects.get_or_create(
+                    group=group,
+                    label=label,
+                    defaults={'display_order': choice_order, 'is_available': True},
+                )
+                if c_created:
+                    self.stdout.write(f'    [choice] {label}')

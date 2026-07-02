@@ -168,8 +168,22 @@ class OrderItem(models.Model):
     catering_variant_choice = models.CharField(max_length=100, null=True, blank=True) # snapshot
     catering_special_requests = models.TextField(blank=True)
 
+    # Custom-cake-specific (blank for all other kinds)
+    # JSON list of {group, choice} dicts, e.g. [{"group": "Fruit Topping", "choice": "Strawberry"}]
+    custom_options_snapshot = models.TextField(blank=True)
+
     class Meta:
         ordering = ['id']
 
     def __str__(self):
         return f'{self.product_name} × {self.quantity} = ${self.line_total}'
+
+    @property
+    def custom_options_list(self):
+        import json
+        if self.custom_options_snapshot:
+            try:
+                return json.loads(self.custom_options_snapshot)
+            except (ValueError, TypeError):
+                return []
+        return []

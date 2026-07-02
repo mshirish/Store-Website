@@ -1,0 +1,135 @@
+{% extends 'base.html' %}
+{% block title %}Custom Cake — Our Store{% endblock %}
+{% block content %}
+<div class="mb-4">
+  <a href="{% url 'catalog:cake_list' %}" class="text-sm text-green-700 hover:underline">&larr; Back to Cakes</a>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
+  <!-- Image placeholder -->
+  <div>
+    {% if product.image %}
+      <img src="{{ product.image.url }}" alt="{{ product.name }}" class="w-full rounded-2xl object-cover max-h-80">
+    {% else %}
+      <div class="w-full h-72 bg-pink-50 rounded-2xl flex items-center justify-center text-pink-200 text-7xl font-light">&#10024;</div>
+    {% endif %}
+  </div>
+
+  <!-- Form -->
+  <div>
+    <h1 class="text-3xl font-bold text-gray-900 mb-1">{{ product.name }}</h1>
+    {% if product.description %}
+      <p class="text-gray-500 mb-6">{{ product.description }}</p>
+    {% endif %}
+
+    {% if user.is_authenticated %}
+    <form method="post" action="{% url 'cart:add' product.pk %}"
+          hx-post="{% url 'cart:add' product.pk %}"
+          hx-swap="none">
+      {% csrf_token %}
+
+      <!-- Size -->
+      <div class="mb-5">
+        <label class="block text-sm font-semibold text-gray-700 mb-2">Size</label>
+        <select name="size" id="size-select" required
+                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
+          <option value="">— Select a size —</option>
+          {% for sp in size_prices %}
+          <option value="{{ sp.size }}">{{ sp.get_size_display }} — ${{ sp.price }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Price display -->
+      <div class="mb-5">
+        <span class="text-2xl font-bold text-green-700" id="price-display">—</span>
+      </div>
+
+      <!-- Flavor -->
+      <div class="mb-5">
+        <label class="block text-sm font-semibold text-gray-700 mb-2">Flavor</label>
+        <select name="flavor_name" required
+                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
+          <option value="">— Select a flavor —</option>
+          {% for flavor in flavors %}
+          <option value="{{ flavor.name }}">{{ flavor.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Dynamic option groups (Fruit Topping, Outer Layer, etc.) -->
+      {% for group in groups %}
+      <div class="mb-5">
+        <label class="block text-sm font-semibold text-gray-700 mb-2">
+          {{ group.name }}
+          {% if not group.required %}<span class="font-normal text-gray-400">(optional)</span>{% endif %}
+        </label>
+        <select name="option_group_{{ group.pk }}" {% if group.required %}required{% endif %}
+                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
+          {% if not group.required %}
+          <option value="">— Skip this option —</option>
+          {% else %}
+          <option value="">— Select {{ group.name }} —</option>
+          {% endif %}
+          {% for choice in group.choices.all %}
+          {% if choice.is_available %}
+          <option value="{{ choice.label }}">{{ choice.label }}</option>
+          {% endif %}
+          {% endfor %}
+        </select>
+      </div>
+      {% endfor %}
+
+      <!-- Quantity -->
+      <div class="mb-5">
+        <label class="block text-sm font-semibold text-gray-700 mb-2">Quantity</label>
+        <input type="number" name="quantity" value="1" min="1" step="1" required
+               class="w-24 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
+      </div>
+
+      <!-- Inscription -->
+      <div class="mb-5">
+        <label class="block text-sm font-semibold text-gray-700 mb-1">
+          Inscription <span class="font-normal text-gray-400">(optional)</span>
+        </label>
+        <input type="text" name="cake_inscription" maxlength="100" placeholder='e.g. "Happy Birthday, Sarah!"'
+               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
+      </div>
+
+      <!-- Special requests -->
+      <div class="mb-6">
+        <label class="block text-sm font-semibold text-gray-700 mb-1">
+          Special requests <span class="font-normal text-gray-400">(optional)</span>
+        </label>
+        <textarea name="cake_special_requests" rows="2" placeholder="Allergies, decorations, colors, etc."
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"></textarea>
+      </div>
+
+      <button type="submit"
+              class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-xl transition-colors">
+        Add to Cart
+      </button>
+    </form>
+    {% else %}
+    <a href="{% url 'account_login' %}?next={{ request.path }}"
+       class="inline-block w-full text-center bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-xl transition-colors">
+      Sign in to order
+    </a>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const sizeData = {{ sizes_json|safe }};
+  const select = document.getElementById('size-select');
+  const display = document.getElementById('price-display');
+
+  function updatePrice() {
+    const price = sizeData[select.value];
+    display.textContent = price ? '$' + parseFloat(price).toFixed(2) : '—';
+  }
+  select.addEventListener('change', updatePrice);
+</script>
+{% endblock %}

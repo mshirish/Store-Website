@@ -5,6 +5,7 @@ from django.shortcuts import get_object_or_404, render
 
 from .models import (
     CakeFlavor,
+    CakeOptionGroup,
     CakeProduct,
     CakeSize,
     CateringProduct,
@@ -24,16 +25,25 @@ def homepage(request):
 def cake_list(request):
     products = (
         CakeProduct.objects
-        .filter(is_available=True)
+        .filter(is_available=True, is_custom=False)
         .prefetch_related('size_prices')
         .select_related('category')
         .order_by('name')
     )
-    return render(request, 'catalog/cake_list.html', {'products': products})
+    custom_cake = (
+        CakeProduct.objects
+        .filter(is_custom=True, is_available=True)
+        .prefetch_related('size_prices')
+        .first()
+    )
+    return render(request, 'catalog/cake_list.html', {
+        'products': products,
+        'custom_cake': custom_cake,
+    })
 
 
 def cake_detail(request, pk):
-    product = get_object_or_404(CakeProduct, pk=pk, is_available=True)
+    product = get_object_or_404(CakeProduct, pk=pk, is_available=True, is_custom=False)
     size_prices = list(product.size_prices.order_by('size'))
     flavors = CakeFlavor.objects.filter(is_active=True)
     sizes_json = json.dumps({sp.size: str(sp.price) for sp in size_prices})
@@ -42,6 +52,27 @@ def cake_detail(request, pk):
         'product': product,
         'size_prices': size_prices,
         'flavors': flavors,
+        'sizes_json': sizes_json,
+        'size_labels': size_labels,
+    })
+
+
+def custom_cake_detail(request):
+    product = get_object_or_404(CakeProduct, is_custom=True, is_available=True)
+    size_prices = list(product.size_prices.order_by('size'))
+    flavors = CakeFlavor.objects.filter(is_active=True)
+    groups = (
+        CakeOptionGroup.objects
+        .prefetch_related('choices')
+        .order_by('display_order', 'name')
+    )
+    sizes_json = json.dumps({sp.size: str(sp.price) for sp in size_prices})
+    size_labels = {choice.value: choice.label for choice in CakeSize}
+    return render(request, 'catalog/custom_cake_detail.html', {
+        'product': product,
+        'size_prices': size_prices,
+        'flavors': flavors,
+        'groups': groups,
         'sizes_json': sizes_json,
         'size_labels': size_labels,
     })

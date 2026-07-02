@@ -76,6 +76,7 @@
             <p class="text-xs text-gray-500 mt-0.5">
               {% if item.cake_size %}{{ item.cake_size }}{% endif %}
               {% if item.cake_flavor_name %}&nbsp;&middot;&nbsp; {{ item.cake_flavor_name }}{% endif %}
+              {% for opt in item.custom_options_list %}&nbsp;&middot;&nbsp; {{ opt.choice }}{% endfor %}
             </p>
             {% if item.cake_inscription %}
               <p class="text-xs text-gray-400 mt-0.5">Inscription: &ldquo;{{ item.cake_inscription }}&rdquo;</p>
