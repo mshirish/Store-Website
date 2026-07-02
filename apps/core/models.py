@@ -14,6 +14,18 @@ class SiteConfiguration(models.Model):
         help_text='Percentage of the order total charged as the advance payment (0–100).',
     )
 
+    # Contact details (all optional — blank fields are silently omitted in the footer)
+    contact_phone = models.CharField(max_length=50, blank=True, default='(508) 796-5365')
+    contact_email = models.EmailField(blank=True, default='info@bahnans.com')
+    contact_address = models.CharField(
+        max_length=255,
+        blank=True,
+        default='344 Pleasant Street, Worcester, MA',
+        help_text='Plain text address used in footer and Google Maps embed.',
+    )
+    facebook_url = models.URLField(blank=True, help_text='Full URL including https://')
+    instagram_url = models.URLField(blank=True, help_text='Full URL including https://')
+
     class Meta:
         verbose_name = 'Site Configuration'
         verbose_name_plural = 'Site Configuration'

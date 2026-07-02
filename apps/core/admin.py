@@ -11,6 +11,14 @@ class SiteConfigurationAdmin(admin.ModelAdmin):
             'fields': ('advance_percentage',),
             'description': 'Percentage of the order total collected as an advance payment (e.g. 50 = 50%).',
         }),
+        ('Contact details', {
+            'fields': ('contact_phone', 'contact_email', 'contact_address'),
+            'description': 'Shown in the site footer. Leave a field blank to hide it.',
+        }),
+        ('Social links', {
+            'fields': ('facebook_url', 'instagram_url'),
+            'description': 'Full URLs (e.g. https://facebook.com/yourpage). Leave blank to hide the icon.',
+        }),
     )
 
     def has_add_permission(self, request):
