@@ -1,5 +1,11 @@
 {% extends 'base.html' %}
 {% block title %}Catering Menu — Our Store{% endblock %}
+{% block extra_head %}
+<style>
+  /* Push anchor targets below both sticky bars (site nav ~53px + jump nav ~53px + buffer) */
+  html { scroll-padding-top: 116px; }
+</style>
+{% endblock %}
 {% block content %}
 <div class="mb-8">
   {% if category.cover_image %}
@@ -9,10 +15,25 @@
   <p class="text-gray-500 mt-1">All items available by tray or weight. Contact us for custom orders.</p>
 </div>
 
+<!-- Section jump-nav: driven from actual CateringSection data, only non-empty sections -->
+<div class="sticky top-[53px] z-[9] bg-white border-b border-gray-200 shadow-sm -mx-4 px-4 mb-8">
+  <div class="flex items-center gap-2 py-2.5 overflow-x-auto"
+       style="scrollbar-width:none;-ms-overflow-style:none">
+    {% for section in sections %}
+      {% if section.products.all %}
+      <a href="#section-{{ section.name|slugify }}"
+         class="shrink-0 px-3 py-1.5 rounded-full text-sm font-medium bg-amber-50 text-amber-800 hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-400 transition-colors whitespace-nowrap">
+        {{ section.name }}
+      </a>
+      {% endif %}
+    {% endfor %}
+  </div>
+</div>
+
 {% for section in sections %}
 {% if section.products.all %}
 <div class="mb-12">
-  <h2 class="text-xl font-bold text-gray-900 border-b border-gray-200 pb-2 mb-4">{{ section.name }}</h2>
+  <h2 id="section-{{ section.name|slugify }}" class="text-xl font-bold text-gray-900 border-b border-gray-200 pb-2 mb-4">{{ section.name }}</h2>
   <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
     {% for product in section.products.all %}
     <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
