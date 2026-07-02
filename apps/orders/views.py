@@ -109,9 +109,9 @@ def _annotate_items(queryset):
     items = list(queryset.select_related('product__category'))
     for item in items:
         if item.cake_size or item.cake_flavor_name:
-            item._kind = CategoryKind.CAKE
+            item.kind = CategoryKind.CAKE
         elif item.catering_option_label:
-            item._kind = CategoryKind.CATERING
+            item.kind = CategoryKind.CATERING
         else:
             kind = None
             if item.product_id:
@@ -119,7 +119,7 @@ def _annotate_items(queryset):
                     kind = item.product.category.kind
                 except Exception:
                     pass
-            item._kind = kind or CategoryKind.GROCERY
+            item.kind = kind or CategoryKind.GROCERY
     return items
 
 
@@ -423,6 +423,35 @@ def payment_cancel(request, pk):
     return render(request, 'orders/payment_cancel.html', {'order': order})
 
 
+@login_required
+@require_POST
+def cancel_order(request, pk):
+    from apps.orders.emails import send_order_cancelled_email
+
+    order = get_object_or_404(Order, pk=pk, customer=request.user)
+
+    if order.status != OrderStatus.AWAITING_PAYMENT:
+        messages.error(request, 'Only orders awaiting payment can be cancelled.')
+        return redirect('orders:order_detail', pk=pk)
+
+    with transaction.atomic():
+        # Mark any open Stripe checkout sessions as failed so the webhook
+        # cannot revive this order if the session completes within its TTL.
+        order.payments.filter(status=PaymentStatus.PENDING).update(
+            status=PaymentStatus.FAILED
+        )
+        order.status = OrderStatus.CANCELLED
+        order.save(update_fields=['status', 'updated_at'])
+
+    try:
+        send_order_cancelled_email(order)
+    except Exception:
+        pass
+
+    messages.success(request, f'Order #{order.pk} has been cancelled.')
+    return redirect('orders:order_list')
+
+
 @csrf_exempt
 @require_POST
 def stripe_webhook(request):
@@ -464,13 +493,16 @@ def _handle_checkout_completed(session):
         if payment.status == PaymentStatus.CAPTURED:
             return  # idempotency guard
 
+        order = payment.order
+        if order.status != OrderStatus.AWAITING_PAYMENT:
+            return  # order was cancelled before payment completed
+
         now = timezone.now()
         payment.status = PaymentStatus.CAPTURED
         payment.captured_at = now
         payment.stripe_payment_intent_id = session.get('payment_intent')
         payment.save(update_fields=['status', 'captured_at', 'stripe_payment_intent_id'])
 
-        order = payment.order
         order.status = OrderStatus.CONFIRMED
         order.save(update_fields=['status', 'updated_at'])
 

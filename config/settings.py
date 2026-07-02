@@ -120,6 +120,9 @@ USE_TZ = True
 # ── Static & media ───────────────────────────────────────────────────────────
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
+# Directory where `collectstatic` writes files for production serving.
+# runserver ignores STATIC_ROOT; gunicorn (prod) needs it.
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'

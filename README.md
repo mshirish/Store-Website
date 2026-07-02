@@ -86,6 +86,103 @@ python manage.py runserver
 
 ---
 
+## Running with Docker
+
+### Prerequisites
+
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (includes both Docker and Docker Compose)
+
+### 1. Create your `.env` file
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and fill in at minimum:
+
+| Variable | Notes |
+|---|---|
+| `SECRET_KEY` | Any long random string |
+| `DB_PASSWORD` | Pick anything — this is the dev Postgres container password |
+| `DB_NAME`, `DB_USER`, `DB_PORT` | Defaults in `.env.example` work as-is |
+| `DATABASE_URL` | Leave the `localhost` URL in place — Compose overrides it automatically |
+| `ACCOUNT_EMAIL_VERIFICATION` | Set to `none` for fast dev (no SMTP needed) |
+
+Stripe keys are optional until you need to test payments.
+
+### 2. Build and start
+
+```bash
+docker compose up --build
+```
+
+On first run this builds the image, starts Postgres, waits for it to be healthy, runs migrations, then starts the Django dev server. Subsequent starts skip the build unless you pass `--build` again.
+
+The app is available at **http://127.0.0.1:8000**.
+
+### 3. Seed default data and create a superuser
+
+Open a second terminal (while the containers are running):
+
+```bash
+# Seed store hours, categories, cake flavors, and site configuration
+docker compose exec web python manage.py seed
+
+# Create the admin user (enter email + password when prompted)
+docker compose exec web python manage.py createsuperuser
+```
+
+Any other management command works the same way:
+
+```bash
+docker compose exec web python manage.py <command>
+```
+
+### 4. Code changes
+
+Source code is mounted directly into the container (`- .:/app`), so edits on the
+host reflect immediately via runserver's autoreload — no rebuild needed.
+
+If you add a new Python package, rebuild the image:
+
+```bash
+docker compose up --build
+```
+
+### 5. Database notes
+
+The Postgres data lives in a **named Docker volume** (`postgres_data`). This means:
+
+- `docker compose down` — stops containers; **data is preserved**
+- `docker compose down -v` — stops containers AND **deletes the volume** (full wipe)
+- Data from a previously native (non-Docker) Postgres install does **not** carry over. Start fresh with `seed` + `createsuperuser` as shown above.
+
+### 6. Stopping
+
+```bash
+docker compose down          # stop; keep data
+docker compose down -v       # stop; wipe database too
+```
+
+### 7. Stripe webhooks with Docker
+
+The Stripe CLI runs on the **host** (not inside Docker) and forwards to
+`localhost:8000`, which Docker maps directly to the container's port 8000. No
+changes to the Stripe setup are needed:
+
+```bash
+stripe listen --forward-to localhost:8000/webhook/stripe/
+```
+
+Copy the printed `whsec_...` value into `.env` as `STRIPE_WEBHOOK_SECRET`. If
+Django is already running, restart it:
+
+```bash
+docker compose restart web
+```
+
+---
+
 ## Testing Stripe payments locally
 
 Stripe webhooks cannot reach `localhost` directly, so you need the Stripe CLI to

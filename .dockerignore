@@ -1,0 +1,37 @@
+# Virtual environment — packages are installed inside the image via pip
+.venv/
+venv/
+env/
+
+# Git history — not needed in the image
+.git/
+.gitignore
+.gitattributes
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Environment files — NEVER bake secrets into the image
+.env
+*.env
+
+# Local data — media and collected static are managed at runtime, not baked in
+media/
+staticfiles/
+
+# Logs and OS artefacts
+*.log
+.DS_Store
+Thumbs.db
+
+# Dev / doc files that have no business in the image
+docker-compose.yml
+.dockerignore
+README.md
+SPEC.md
+
+# SQLite (shouldn't be used but exclude just in case)
+db.sqlite3

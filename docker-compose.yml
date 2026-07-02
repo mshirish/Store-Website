@@ -1,0 +1,51 @@
+services:
+
+  # ── PostgreSQL ────────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: "${DB_NAME:-store_db}"
+      POSTGRES_USER: "${DB_USER:-store_user}"
+      POSTGRES_PASSWORD: "${DB_PASSWORD}"
+    volumes:
+      # Named volume: data survives `docker compose down`.
+      # Use `docker compose down -v` only when you want to wipe the database.
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-store_user} -d ${DB_NAME:-store_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Django (dev) ─────────────────────────────────────────────────────────────
+  web:
+    build: .
+    # Override the Dockerfile's production CMD with runserver for dev.
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      # Mount source so edits reflect live without rebuilding the image.
+      - .:/app
+      # Named volume for user-uploaded media. Must be declared separately so
+      # it is NOT wiped when .:/app is remounted (a bind mount would shadow it).
+      - media_files:/app/media
+    ports:
+      - "8000:8000"
+    # Load all Django settings (SECRET_KEY, STRIPE keys, email config, etc.)
+    # from .env. Copy .env.example → .env and fill in your values.
+    env_file:
+      - .env
+    environment:
+      # Override DATABASE_URL so the app reaches Postgres by the service name
+      # 'db' (not localhost). compose reads DB_* from .env for substitution here.
+      # This takes precedence over the DATABASE_URL in .env and over any value
+      # that django-environ reads from the .env file at runtime.
+      DATABASE_URL: "postgres://${DB_USER:-store_user}:${DB_PASSWORD}@db:${DB_PORT:-5432}/${DB_NAME:-store_db}"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  # Postgres data persists across restarts and `docker compose down`.
+  postgres_data:
+  # Media uploads persist across restarts in dev.
+  media_files:

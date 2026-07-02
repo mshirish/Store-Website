@@ -1,0 +1,3 @@
+# Ensure shell scripts always use Unix line endings (LF).
+# Git on Windows defaults to CRLF, which breaks /bin/sh inside the container.
+*.sh text eol=lf

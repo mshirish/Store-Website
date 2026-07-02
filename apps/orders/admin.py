@@ -116,6 +116,11 @@ def cancel_orders(modeladmin, request, queryset):
     from apps.orders.emails import send_order_cancelled_email
     # exclude already-terminal statuses so we never double-cancel or double-email
     for order in queryset.exclude(status__in=[OrderStatus.COMPLETED, OrderStatus.CANCELLED]):
+        # Neutralize any open Stripe sessions before cancelling so the webhook
+        # cannot revive the order if a session completes within its TTL.
+        order.payments.filter(status=PaymentStatus.PENDING).update(
+            status=PaymentStatus.FAILED
+        )
         order.status = OrderStatus.CANCELLED
         order.save(update_fields=['status', 'updated_at'])
         try:
