@@ -1,7 +1,9 @@
 import json
 
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, render
+from django.urls import reverse
 
 from .models import (
     Category,
@@ -15,6 +17,7 @@ from .models import (
     GroceryProduct,
     MeatProduct,
     PricingMode,
+    Product,
 )
 
 
@@ -155,4 +158,110 @@ def catering_detail(request, pk):
         'variants': variants,
         'options_json': options_json,
         'BY_WEIGHT': PricingMode.BY_WEIGHT,
+    })
+
+
+# ── Search ────────────────────────────────────────────────────────────────────
+
+def _detail_url(product, custom_cake_pk):
+    kind = product.category.kind
+    if kind == CategoryKind.CAKE:
+        if product.pk == custom_cake_pk:
+            return reverse('catalog:custom_cake_detail')
+        return reverse('catalog:cake_detail', args=[product.pk])
+    if kind == CategoryKind.MEAT:
+        return reverse('catalog:meat_detail', args=[product.pk])
+    if kind == CategoryKind.GROCERY:
+        return reverse('catalog:grocery_detail', args=[product.pk])
+    if kind == CategoryKind.CATERING:
+        return reverse('catalog:catering_detail', args=[product.pk])
+    return '#'
+
+
+def search_suggestions(request):
+    q = request.GET.get('q', '').strip()
+    if len(q) < 2:
+        return HttpResponse('')
+
+    custom_cake_pk = (
+        CakeProduct.objects.filter(is_custom=True)
+        .values_list('pk', flat=True)
+        .first()
+    )
+    products = (
+        Product.objects
+        .filter(is_available=True)
+        .filter(Q(name__icontains=q) | Q(category__name__icontains=q))
+        .select_related('category')
+        .order_by('name')[:8]
+    )
+    results = [
+        {
+            'name': p.name,
+            'kind_label': p.category.get_kind_display(),
+            'url': _detail_url(p, custom_cake_pk),
+            'image': p.image,
+        }
+        for p in products
+    ]
+    return render(request, 'catalog/search_suggestions.html', {
+        'results': results,
+        'query': q,
+    })
+
+
+def search_results(request):
+    q = request.GET.get('q', '').strip()
+    groups = []
+    total = 0
+
+    if q:
+        name_q = Q(name__icontains=q) | Q(category__name__icontains=q)
+
+        cakes = list(
+            CakeProduct.objects
+            .filter(is_available=True).filter(name_q)
+            .select_related('category')
+            .prefetch_related('size_prices')
+            .order_by('is_custom', 'name')
+        )
+        meats = list(
+            MeatProduct.objects
+            .filter(is_available=True).filter(name_q)
+            .select_related('category')
+            .order_by('name')
+        )
+        groceries = list(
+            GroceryProduct.objects
+            .filter(is_available=True).filter(name_q)
+            .select_related('category')
+            .order_by('name')
+        )
+        caterings = list(
+            CateringProduct.objects
+            .filter(is_available=True)
+            .filter(
+                Q(name__icontains=q) |
+                Q(category__name__icontains=q) |
+                Q(section__name__icontains=q)
+            )
+            .select_related('category', 'section')
+            .prefetch_related('options')
+            .order_by('name')
+        )
+
+        if cakes:
+            groups.append({'kind': 'cake', 'label': 'Cakes', 'products': cakes})
+        if meats:
+            groups.append({'kind': 'meat', 'label': 'Meat', 'products': meats})
+        if groceries:
+            groups.append({'kind': 'grocery', 'label': 'Grocery', 'products': groceries})
+        if caterings:
+            groups.append({'kind': 'catering', 'label': 'Catering', 'products': caterings})
+        total = sum(len(g['products']) for g in groups)
+
+    return render(request, 'catalog/search_results.html', {
+        'query': q,
+        'groups': groups,
+        'total': total,
     })

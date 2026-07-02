@@ -32,6 +32,22 @@
             {% endif %}
           </div>
 
+          <!-- Desktop search (md+) -->
+          <div class="hidden md:block relative">
+            <form action="{% url 'catalog:search' %}" method="get" role="search">
+              <input type="search" name="q" id="search-input-desktop"
+                     placeholder="Search…"
+                     autocomplete="off"
+                     aria-label="Search products"
+                     hx-get="{% url 'catalog:search_suggestions' %}"
+                     hx-trigger="input delay:300ms"
+                     hx-target="#search-dropdown-desktop"
+                     class="w-40 lg:w-52 border border-gray-200 rounded-full px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-gray-50 focus:bg-white transition-colors">
+            </form>
+            <div id="search-dropdown-desktop"
+                 class="absolute top-full mt-1 left-0 min-w-[260px] bg-white border border-gray-100 rounded-xl shadow-lg overflow-hidden z-50"></div>
+          </div>
+
           <!-- Cart — always visible on all screen sizes so #cart-badge stays in DOM for HTMX OOB swap -->
           {% if user.is_authenticated %}
           <a href="{% url 'cart:cart' %}" class="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-full transition-colors text-sm font-medium">
@@ -65,7 +81,23 @@
       </div>
 
       <!-- Mobile dropdown (below md, hidden until toggled) -->
-      <div id="nav-menu" class="hidden md:hidden border-t border-gray-100 py-2 space-y-0.5">
+      <div id="nav-menu" class="hidden md:hidden border-t border-gray-100 pt-3 pb-2">
+        <!-- Mobile search -->
+        <div class="relative px-1 mb-3">
+          <form action="{% url 'catalog:search' %}" method="get" role="search">
+            <input type="search" name="q" id="search-input-mobile"
+                   placeholder="Search products…"
+                   autocomplete="off"
+                   aria-label="Search products"
+                   hx-get="{% url 'catalog:search_suggestions' %}"
+                   hx-trigger="input delay:300ms"
+                   hx-target="#search-dropdown-mobile"
+                   class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-gray-50 focus:bg-white transition-colors">
+          </form>
+          <div id="search-dropdown-mobile"
+               class="mt-1 bg-white border border-gray-100 rounded-xl shadow-md overflow-hidden z-50"></div>
+        </div>
+        <div class="space-y-0.5">
         <a href="{% url 'catalog:cake_list' %}"
            class="block px-3 py-2.5 text-sm font-medium text-gray-700 hover:text-green-700 hover:bg-green-50 rounded-lg transition-colors">Cakes</a>
         <a href="{% url 'catalog:meat_list' %}"
@@ -86,6 +118,7 @@
           <a href="{% url 'account_signup' %}"
              class="block px-3 py-2.5 text-sm font-medium text-green-700 hover:text-green-800 hover:bg-green-50 rounded-lg transition-colors">Sign up</a>
         {% endif %}
+        </div>
       </div>
     </div>
   </nav>
@@ -123,6 +156,50 @@
 
   <script src="https://unpkg.com/htmx.org@1.9.12/dist/htmx.min.js"></script>
   <script>
+    // Search dropdown: keyboard nav + close-on-blur
+    (function () {
+      function initSearchDropdown(inputId, dropdownId) {
+        var input = document.getElementById(inputId);
+        var dropdown = document.getElementById(dropdownId);
+        if (!input || !dropdown) return;
+
+        function getSuggestions() {
+          return Array.from(dropdown.querySelectorAll('a.suggestion-item'));
+        }
+        function clearDropdown() {
+          dropdown.innerHTML = '';
+        }
+
+        // Close when focus escapes both input and dropdown
+        function onBlur() {
+          setTimeout(function () {
+            if (document.activeElement !== input && !dropdown.contains(document.activeElement)) {
+              clearDropdown();
+            }
+          }, 150);
+        }
+        input.addEventListener('blur', onBlur);
+        dropdown.addEventListener('focusout', onBlur);
+
+        input.addEventListener('keydown', function (e) {
+          var items = getSuggestions();
+          if (e.key === 'Escape') { clearDropdown(); return; }
+          if (e.key === 'ArrowDown' && items.length) { e.preventDefault(); items[0].focus(); }
+        });
+
+        dropdown.addEventListener('keydown', function (e) {
+          var items = getSuggestions();
+          var idx = items.indexOf(document.activeElement);
+          if (e.key === 'Escape') { clearDropdown(); input.focus(); }
+          else if (e.key === 'ArrowDown') { e.preventDefault(); if (idx < items.length - 1) items[idx + 1].focus(); }
+          else if (e.key === 'ArrowUp') { e.preventDefault(); if (idx > 0) items[idx - 1].focus(); else input.focus(); }
+        });
+      }
+
+      initSearchDropdown('search-input-desktop', 'search-dropdown-desktop');
+      initSearchDropdown('search-input-mobile', 'search-dropdown-mobile');
+    })();
+
     // Hamburger menu toggle
     (function () {
       var toggle = document.getElementById('nav-toggle');
