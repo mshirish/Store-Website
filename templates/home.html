@@ -9,31 +9,63 @@
   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
 
     <a href="{% url 'catalog:cake_list' %}"
-       class="group bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-green-200 p-7 text-left transition-all">
-      <div class="w-10 h-10 bg-pink-100 rounded-xl mb-4 flex items-center justify-center text-pink-600 font-bold text-lg">C</div>
-      <h2 class="text-lg font-semibold text-gray-900 group-hover:text-green-700 mb-1">Cakes</h2>
-      <p class="text-sm text-gray-500">Custom sizes, your choice of flavor</p>
+       class="group bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-green-200 overflow-hidden transition-all text-left">
+      {% with cat=categories.cake %}
+      {% if cat.cover_image %}
+        <img src="{{ cat.cover_image.url }}" alt="Cakes" class="w-full h-40 object-cover">
+      {% else %}
+        <div class="w-full h-40 bg-pink-100 flex items-center justify-center text-pink-600 font-bold text-4xl">C</div>
+      {% endif %}
+      {% endwith %}
+      <div class="p-5">
+        <h2 class="text-lg font-semibold text-gray-900 group-hover:text-green-700 mb-1">Cakes</h2>
+        <p class="text-sm text-gray-500">Custom sizes, your choice of flavor</p>
+      </div>
     </a>
 
     <a href="{% url 'catalog:meat_list' %}"
-       class="group bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-green-200 p-7 text-left transition-all">
-      <div class="w-10 h-10 bg-red-100 rounded-xl mb-4 flex items-center justify-center text-red-600 font-bold text-lg">M</div>
-      <h2 class="text-lg font-semibold text-gray-900 group-hover:text-green-700 mb-1">Meat</h2>
-      <p class="text-sm text-gray-500">Fresh cuts, priced per pound</p>
+       class="group bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-green-200 overflow-hidden transition-all text-left">
+      {% with cat=categories.meat %}
+      {% if cat.cover_image %}
+        <img src="{{ cat.cover_image.url }}" alt="Meat" class="w-full h-40 object-cover">
+      {% else %}
+        <div class="w-full h-40 bg-red-100 flex items-center justify-center text-red-600 font-bold text-4xl">M</div>
+      {% endif %}
+      {% endwith %}
+      <div class="p-5">
+        <h2 class="text-lg font-semibold text-gray-900 group-hover:text-green-700 mb-1">Meat</h2>
+        <p class="text-sm text-gray-500">Fresh cuts, priced per pound</p>
+      </div>
     </a>
 
     <a href="{% url 'catalog:grocery_list' %}"
-       class="group bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-green-200 p-7 text-left transition-all">
-      <div class="w-10 h-10 bg-green-100 rounded-xl mb-4 flex items-center justify-center text-green-600 font-bold text-lg">G</div>
-      <h2 class="text-lg font-semibold text-gray-900 group-hover:text-green-700 mb-1">Grocery</h2>
-      <p class="text-sm text-gray-500">Pantry staples and everyday essentials</p>
+       class="group bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-green-200 overflow-hidden transition-all text-left">
+      {% with cat=categories.grocery %}
+      {% if cat.cover_image %}
+        <img src="{{ cat.cover_image.url }}" alt="Grocery" class="w-full h-40 object-cover">
+      {% else %}
+        <div class="w-full h-40 bg-green-100 flex items-center justify-center text-green-600 font-bold text-4xl">G</div>
+      {% endif %}
+      {% endwith %}
+      <div class="p-5">
+        <h2 class="text-lg font-semibold text-gray-900 group-hover:text-green-700 mb-1">Grocery</h2>
+        <p class="text-sm text-gray-500">Pantry staples and everyday essentials</p>
+      </div>
     </a>
 
     <a href="{% url 'catalog:catering_menu' %}"
-       class="group bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-green-200 p-7 text-left transition-all">
-      <div class="w-10 h-10 bg-amber-100 rounded-xl mb-4 flex items-center justify-center text-amber-600 font-bold text-lg">T</div>
-      <h2 class="text-lg font-semibold text-gray-900 group-hover:text-green-700 mb-1">Catering</h2>
-      <p class="text-sm text-gray-500">Trays, platters, and full event menus</p>
+       class="group bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-green-200 overflow-hidden transition-all text-left">
+      {% with cat=categories.catering %}
+      {% if cat.cover_image %}
+        <img src="{{ cat.cover_image.url }}" alt="Catering" class="w-full h-40 object-cover">
+      {% else %}
+        <div class="w-full h-40 bg-amber-100 flex items-center justify-center text-amber-600 font-bold text-4xl">T</div>
+      {% endif %}
+      {% endwith %}
+      <div class="p-5">
+        <h2 class="text-lg font-semibold text-gray-900 group-hover:text-green-700 mb-1">Catering</h2>
+        <p class="text-sm text-gray-500">Trays, platters, and full event menus</p>
+      </div>
     </a>
 
   </div>

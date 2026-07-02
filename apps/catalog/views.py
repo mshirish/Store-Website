@@ -4,6 +4,8 @@ from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404, render
 
 from .models import (
+    Category,
+    CategoryKind,
     CakeFlavor,
     CakeOptionGroup,
     CakeProduct,
@@ -17,7 +19,8 @@ from .models import (
 
 
 def homepage(request):
-    return render(request, 'home.html')
+    cats = {c.kind: c for c in Category.objects.filter(is_active=True)}
+    return render(request, 'home.html', {'categories': cats})
 
 
 # ── Cakes ─────────────────────────────────────────────────────────────────────
@@ -36,9 +39,11 @@ def cake_list(request):
         .prefetch_related('size_prices')
         .first()
     )
+    category = Category.objects.filter(kind=CategoryKind.CAKE, is_active=True).first()
     return render(request, 'catalog/cake_list.html', {
         'products': products,
         'custom_cake': custom_cake,
+        'category': category,
     })
 
 
@@ -87,7 +92,8 @@ def meat_list(request):
         .select_related('category')
         .order_by('name')
     )
-    return render(request, 'catalog/meat_list.html', {'products': products})
+    category = Category.objects.filter(kind=CategoryKind.MEAT, is_active=True).first()
+    return render(request, 'catalog/meat_list.html', {'products': products, 'category': category})
 
 
 def meat_detail(request, pk):
@@ -104,7 +110,8 @@ def grocery_list(request):
         .select_related('category')
         .order_by('name')
     )
-    return render(request, 'catalog/grocery_list.html', {'products': products})
+    category = Category.objects.filter(kind=CategoryKind.GROCERY, is_active=True).first()
+    return render(request, 'catalog/grocery_list.html', {'products': products, 'category': category})
 
 
 def grocery_detail(request, pk):
@@ -130,7 +137,8 @@ def catering_menu(request):
         )
         .order_by('sort_order', 'name')
     )
-    return render(request, 'catalog/catering_menu.html', {'sections': sections})
+    category = Category.objects.filter(kind=CategoryKind.CATERING, is_active=True).first()
+    return render(request, 'catalog/catering_menu.html', {'sections': sections, 'category': category})
 
 
 def catering_detail(request, pk):

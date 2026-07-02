@@ -322,7 +322,59 @@ def place_order(request):
             )
         cart.items.all().delete()
 
-    return redirect(reverse('orders:order_detail', kwargs={'pk': order.pk}) + '?just_placed=1')
+    # Immediately redirect to Stripe Checkout so the user pays without an
+    # intermediate "pay advance" page. On any Stripe error the order already
+    # exists and the order-detail page provides a retry button.
+    import stripe as stripe_lib
+    stripe_lib.api_key = settings.STRIPE_SECRET_KEY
+
+    try:
+        success_url = (
+            request.build_absolute_uri(
+                reverse('orders:payment_success', kwargs={'pk': order.pk})
+            )
+            + '?session_id={CHECKOUT_SESSION_ID}'
+        )
+        cancel_url = request.build_absolute_uri(
+            reverse('orders:order_detail', kwargs={'pk': order.pk})
+        )
+        session = stripe_lib.checkout.Session.create(
+            payment_method_types=['card'],
+            line_items=[{
+                'price_data': {
+                    'currency': 'usd',
+                    'unit_amount': int(order.advance_amount * 100),
+                    'product_data': {
+                        'name': f'Order #{order.pk} — Advance Payment',
+                        'description': (
+                            f'Advance for pickup on {order.pickup_date.strftime("%B %d, %Y")}. '
+                            f'Balance of ${order.balance_amount} due at pickup.'
+                        ),
+                    },
+                },
+                'quantity': 1,
+            }],
+            mode='payment',
+            success_url=success_url,
+            cancel_url=cancel_url,
+            customer_email=request.user.email,
+            metadata={'order_pk': str(order.pk)},
+        )
+        Payment.objects.create(
+            order=order,
+            amount=order.advance_amount,
+            gateway='stripe',
+            gateway_reference=session.id,
+            status=PaymentStatus.PENDING,
+        )
+        return redirect(session.url)
+    except Exception:
+        messages.warning(
+            request,
+            'Your order was placed, but we could not connect to our payment provider. '
+            'Use the button below to complete your payment, or contact us for help.'
+        )
+        return redirect(reverse('orders:order_detail', kwargs={'pk': order.pk}))
 
 
 @login_required
@@ -375,7 +427,7 @@ def initiate_payment(request, pk):
         + '?session_id={CHECKOUT_SESSION_ID}'
     )
     cancel_url = request.build_absolute_uri(
-        reverse('orders:payment_cancel', kwargs={'pk': order.pk})
+        reverse('orders:order_detail', kwargs={'pk': order.pk})
     )
 
     session = stripe_lib.checkout.Session.create(

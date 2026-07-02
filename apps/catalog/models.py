@@ -15,6 +15,12 @@ class Category(models.Model):
     name = models.CharField(max_length=100, unique=True)
     kind = models.CharField(max_length=20, choices=CategoryKind.choices)
     description = models.TextField(blank=True)
+    cover_image = models.ImageField(
+        upload_to='categories/',
+        blank=True,
+        null=True,
+        help_text='Cover image shown on the homepage tile and the category listing header.',
+    )
     is_active = models.BooleanField(default=True)
     tax_rate = models.DecimalField(
         max_digits=6,

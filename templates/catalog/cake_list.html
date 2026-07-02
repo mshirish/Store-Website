@@ -2,6 +2,9 @@
 {% block title %}Cakes — Our Store{% endblock %}
 {% block content %}
 <div class="mb-6">
+  {% if category.cover_image %}
+    <img src="{{ category.cover_image.url }}" alt="Cakes" class="w-full h-52 object-cover rounded-2xl mb-4">
+  {% endif %}
   <h1 class="text-3xl font-bold text-gray-900">Cakes</h1>
   <p class="text-gray-500 mt-1">Choose a cake, then pick your size, flavor, and any custom text.</p>
 </div>

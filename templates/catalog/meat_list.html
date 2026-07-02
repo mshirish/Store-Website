@@ -2,6 +2,9 @@
 {% block title %}Meat — Our Store{% endblock %}
 {% block content %}
 <div class="mb-6">
+  {% if category.cover_image %}
+    <img src="{{ category.cover_image.url }}" alt="Meat" class="w-full h-52 object-cover rounded-2xl mb-4">
+  {% endif %}
   <h1 class="text-3xl font-bold text-gray-900">Meat</h1>
   <p class="text-gray-500 mt-1">All cuts priced per pound. Enter your desired weight when ordering.</p>
 </div>

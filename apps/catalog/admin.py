@@ -22,6 +22,9 @@ class CategoryAdmin(admin.ModelAdmin):
     list_filter = ('kind', 'is_active')
     list_editable = ('is_active', 'tax_rate')
     search_fields = ('name',)
+    fieldsets = (
+        (None, {'fields': ('name', 'kind', 'description', 'cover_image', 'is_active', 'tax_rate')}),
+    )
 
 
 @admin.register(CakeFlavor)
