@@ -1,10 +1,20 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}Our Store{% endblock %}</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/output.css' %}">
+  <style>
+    /* Fraunces (warm serif) — structural headings h1–h6 only, never buttons/labels/body.
+       DM Sans (humanist sans) — all other text, inherited by form elements via Tailwind preflight. */
+    body { font-family: 'DM Sans', system-ui, -apple-system, sans-serif; }
+    h1, h2, h3, h4, h5, h6 { font-family: 'Fraunces', Georgia, serif; }
+  </style>
   {% block extra_head %}{% endblock %}
 </head>
 <body class="bg-gray-50 text-gray-800 min-h-screen flex flex-col">
@@ -226,7 +236,7 @@
 
       </div>
 
-      <div class="border-t border-gray-100 pt-5 text-center text-xs text-gray-400">
+      <div class="border-t border-gray-100 pt-5 text-center text-xs text-gray-500">
         &copy; {% now "Y" %} {{ site_config.site_name }}. All rights reserved.
       </div>
     </div>

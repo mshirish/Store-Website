@@ -64,7 +64,7 @@
                 <div class="flex items-baseline gap-2 flex-wrap">
                   <span class="text-sm font-medium text-gray-800">{{ option.label }}</span>
                   {% if option.serves_note %}
-                    <span class="text-xs text-gray-400">{{ option.serves_note }}</span>
+                    <span class="text-xs text-gray-500">{{ option.serves_note }}</span>
                   {% endif %}
                   <span class="text-sm font-semibold text-green-700">
                     ${{ option.price }}{% if option.pricing_mode == 'by_weight' %}/lb{% endif %}
@@ -74,7 +74,7 @@
               </div>
               {% with variants=product.variants.all %}
               {% if variants %}
-                <p class="text-xs text-gray-400 mt-2">
+                <p class="text-xs text-gray-500 mt-2">
                   Choice:
                   {% for v in variants %}{{ v.label }}{% if not forloop.last %}, {% endif %}{% endfor %}
                 </p>

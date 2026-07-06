@@ -26,7 +26,7 @@
                  hx-target="#pickup-window-display"
                  hx-include="[name='pickup_date']"
                  class="w-full max-w-xs border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
-          <p class="text-xs text-gray-400 mt-1">Earliest available: {{ earliest_pickup }}</p>
+          <p class="text-xs text-gray-500 mt-1">Earliest available: {{ earliest_pickup }}</p>
         </div>
 
         <div id="pickup-window-display" class="min-h-[2.5rem]"></div>
@@ -77,15 +77,15 @@
           <div class="flex-1 min-w-0 mr-3">
             <span class="font-medium text-gray-800">{{ item.product_name }}</span>
             {% if item.kind == 'cake' %}
-              <span class="text-gray-400 text-xs ml-1">{{ item.cake_size }}{% if item.cake_flavor_name %}, {{ item.cake_flavor_name }}{% endif %}</span>
+              <span class="text-gray-500 text-xs ml-1">{{ item.cake_size }}{% if item.cake_flavor_name %}, {{ item.cake_flavor_name }}{% endif %}</span>
             {% elif item.kind == 'meat' %}
-              <span class="text-gray-400 text-xs ml-1">{{ item.quantity|floatformat:"-3" }} lb</span>
+              <span class="text-gray-500 text-xs ml-1">{{ item.quantity|floatformat:"-3" }} lb</span>
             {% elif item.kind == 'catering' %}
-              <span class="text-gray-400 text-xs ml-1">{{ item.catering_option_label }}
+              <span class="text-gray-500 text-xs ml-1">{{ item.catering_option_label }}
                 {% if item.catering_pricing_mode == 'by_weight' %}({{ item.quantity|floatformat:"-3" }} lb){% endif %}
               </span>
             {% elif item.kind == 'grocery' %}
-              <span class="text-gray-400 text-xs ml-1">x{{ item.quantity|floatformat:0 }}</span>
+              <span class="text-gray-500 text-xs ml-1">x{{ item.quantity|floatformat:0 }}</span>
             {% endif %}
           </div>
           <span class="font-medium text-gray-900 whitespace-nowrap">${{ item.line_total }}</span>
@@ -119,7 +119,7 @@
       </div>
     </div>
 
-    <p class="text-xs text-gray-400 text-center px-2">
+    <p class="text-xs text-gray-500 text-center px-2">
       You'll pay the advance amount on the confirmation page.
     </p>
 

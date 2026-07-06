@@ -1,0 +1,25 @@
+{
+  "name": "store-website",
+  "version": "1.0.0",
+  "description": "Django + PostgreSQL web app for a grocery/bakery/meat store.",
+  "main": "index.js",
+  "scripts": {
+    "build:css": "tailwindcss -i static/css/input.css -o static/css/output.css --minify",
+    "dev:css": "tailwindcss -i static/css/input.css -o static/css/output.css --watch"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mshirish/Store-Website.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/mshirish/Store-Website/issues"
+  },
+  "homepage": "https://github.com/mshirish/Store-Website#readme",
+  "devDependencies": {
+    "tailwindcss": "^3.4.19"
+  }
+}

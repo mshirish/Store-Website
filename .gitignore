@@ -38,6 +38,9 @@ media/
 staticfiles/
 static_root/
 
+# Node
+node_modules/
+
 # IDEs
 .idea/
 .vscode/

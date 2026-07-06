@@ -14,7 +14,7 @@
       <div class="flex items-center justify-between gap-4">
         <div>
           <span class="font-semibold text-gray-900">Order #{{ order.pk }}</span>
-          <span class="text-sm text-gray-400 ml-2">{{ order.created_at|date:"M j, Y" }}</span>
+          <span class="text-sm text-gray-500 ml-2">{{ order.created_at|date:"M j, Y" }}</span>
         </div>
         {% if order.status == 'completed' %}
           <span class="inline-block bg-gray-100 text-gray-600 text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap">Completed</span>
@@ -35,7 +35,7 @@
   </div>
 
   {% else %}
-  <div class="text-center py-20 text-gray-400">
+  <div class="text-center py-20 text-gray-500">
     <p class="text-xl mb-3">No orders yet</p>
     <a href="{% url 'catalog:home' %}" class="text-green-700 hover:underline text-sm">Browse our menu</a>
   </div>

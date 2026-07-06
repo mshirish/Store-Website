@@ -35,7 +35,7 @@
     <div class="flex items-start justify-between gap-4">
       <div>
         <h1 class="text-xl font-bold text-gray-900">Order #{{ order.pk }}</h1>
-        <p class="text-sm text-gray-400 mt-0.5">Placed {{ order.created_at|date:"F j, Y" }}</p>
+        <p class="text-sm text-gray-500 mt-0.5">Placed {{ order.created_at|date:"F j, Y" }}</p>
       </div>
       {% if order.status == 'completed' %}
         <span class="inline-block bg-gray-100 text-gray-600 text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap">Completed</span>
@@ -69,10 +69,10 @@
               {% for opt in item.custom_options_list %}&nbsp;&middot;&nbsp; {{ opt.choice }}{% endfor %}
             </p>
             {% if item.cake_inscription %}
-              <p class="text-xs text-gray-400 mt-0.5">Inscription: &ldquo;{{ item.cake_inscription }}&rdquo;</p>
+              <p class="text-xs text-gray-500 mt-0.5">Inscription: &ldquo;{{ item.cake_inscription }}&rdquo;</p>
             {% endif %}
             {% if item.cake_special_requests %}
-              <p class="text-xs text-gray-400 mt-0.5">Notes: {{ item.cake_special_requests }}</p>
+              <p class="text-xs text-gray-500 mt-0.5">Notes: {{ item.cake_special_requests }}</p>
             {% endif %}
           {% elif item.kind == 'catering' %}
             <p class="text-xs text-gray-500 mt-0.5">
@@ -81,10 +81,10 @@
               {% if item.catering_variant_choice %}&nbsp;&middot;&nbsp; {{ item.catering_variant_choice }}{% endif %}
             </p>
             {% if item.catering_special_requests %}
-              <p class="text-xs text-gray-400 mt-0.5">Notes: {{ item.catering_special_requests }}</p>
+              <p class="text-xs text-gray-500 mt-0.5">Notes: {{ item.catering_special_requests }}</p>
             {% endif %}
           {% endif %}
-          <p class="text-xs text-gray-400 mt-0.5">
+          <p class="text-xs text-gray-500 mt-0.5">
             ${{ item.unit_price_snapshot }}{% if item.kind == 'meat' %}/lb{% endif %}
             &times; {{ item.quantity|floatformat:"-3" }}{% if item.kind == 'meat' %}&nbsp;lb{% endif %}
           </p>
@@ -134,7 +134,7 @@
     <form method="post" action="{% url 'orders:initiate_payment' pk=order.pk %}">
       {% csrf_token %}
       <button type="submit"
-              class="w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold py-2.5 rounded-xl transition-colors text-sm">
+              class="w-full bg-amber-600 hover:bg-amber-700 text-gray-900 font-semibold py-2.5 rounded-xl transition-colors text-sm">
         Complete payment — ${{ order.advance_amount }}
       </button>
     </form>

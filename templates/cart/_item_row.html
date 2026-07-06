@@ -13,12 +13,12 @@
       <div class="text-xs text-gray-500 mt-0.5">
         {{ item.catering_option_label }}
         {% if item.catering_serves_note %}
-          <span class="text-gray-400"> &middot; {{ item.catering_serves_note }}</span>
+          <span class="text-gray-500"> &middot; {{ item.catering_serves_note }}</span>
         {% endif %}
         {% if item.catering_variant_choice %} &middot; {{ item.catering_variant_choice }}{% endif %}
       </div>
     {% endif %}
-    <div class="text-xs text-gray-400 mt-0.5">
+    <div class="text-xs text-gray-500 mt-0.5">
       ${{ item.unit_price_snapshot }}{% if item.is_by_weight %}/lb{% endif %}
     </div>
   </td>
