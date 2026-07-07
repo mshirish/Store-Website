@@ -1,6 +1,9 @@
 import datetime
 import json
+import logging
 from decimal import Decimal, ROUND_HALF_UP
+
+logger = logging.getLogger(__name__)
 
 from django.conf import settings
 from django.contrib import messages
@@ -328,16 +331,17 @@ def place_order(request):
     import stripe as stripe_lib
     stripe_lib.api_key = settings.STRIPE_SECRET_KEY
 
+    success_url = (
+        request.build_absolute_uri(
+            reverse('orders:payment_success', kwargs={'pk': order.pk})
+        )
+        + '?session_id={CHECKOUT_SESSION_ID}'
+    )
+    cancel_url = request.build_absolute_uri(
+        reverse('orders:order_detail', kwargs={'pk': order.pk})
+    )
+
     try:
-        success_url = (
-            request.build_absolute_uri(
-                reverse('orders:payment_success', kwargs={'pk': order.pk})
-            )
-            + '?session_id={CHECKOUT_SESSION_ID}'
-        )
-        cancel_url = request.build_absolute_uri(
-            reverse('orders:order_detail', kwargs={'pk': order.pk})
-        )
         session = stripe_lib.checkout.Session.create(
             payment_method_types=['card'],
             line_items=[{
@@ -360,14 +364,6 @@ def place_order(request):
             customer_email=request.user.email,
             metadata={'order_pk': str(order.pk)},
         )
-        Payment.objects.create(
-            order=order,
-            amount=order.advance_amount,
-            gateway='stripe',
-            gateway_reference=session.id,
-            status=PaymentStatus.PENDING,
-        )
-        return redirect(session.url)
     except Exception:
         messages.warning(
             request,
@@ -375,6 +371,30 @@ def place_order(request):
             'Use the button below to complete your payment, or contact us for help.'
         )
         return redirect(reverse('orders:order_detail', kwargs={'pk': order.pk}))
+
+    try:
+        Payment.objects.create(
+            order=order,
+            amount=order.advance_amount,
+            gateway='stripe',
+            gateway_reference=session.id,
+            status=PaymentStatus.PENDING,
+        )
+    except Exception:
+        logger.error(
+            'Stripe session %s was created for order %d but the local Payment row failed '
+            'to save — the webhook for this session will find no matching Payment row. '
+            'Reconcile manually.',
+            session.id, order.pk, exc_info=True,
+        )
+        messages.warning(
+            request,
+            'Your order was placed, but we could not connect to our payment provider. '
+            'Use the button below to complete your payment, or contact us for help.'
+        )
+        return redirect(reverse('orders:order_detail', kwargs={'pk': order.pk}))
+
+    return redirect(session.url)
 
 
 @login_required
@@ -430,36 +450,50 @@ def initiate_payment(request, pk):
         reverse('orders:order_detail', kwargs={'pk': order.pk})
     )
 
-    session = stripe_lib.checkout.Session.create(
-        payment_method_types=['card'],
-        line_items=[{
-            'price_data': {
-                'currency': 'usd',
-                'unit_amount': int(order.advance_amount * 100),
-                'product_data': {
-                    'name': f'Order #{order.pk} — Advance Payment',
-                    'description': (
-                        f'Advance for pickup on {order.pickup_date.strftime("%B %d, %Y")}. '
-                        f'Balance of ${order.balance_amount} due at pickup.'
-                    ),
+    try:
+        session = stripe_lib.checkout.Session.create(
+            payment_method_types=['card'],
+            line_items=[{
+                'price_data': {
+                    'currency': 'usd',
+                    'unit_amount': int(order.advance_amount * 100),
+                    'product_data': {
+                        'name': f'Order #{order.pk} — Advance Payment',
+                        'description': (
+                            f'Advance for pickup on {order.pickup_date.strftime("%B %d, %Y")}. '
+                            f'Balance of ${order.balance_amount} due at pickup.'
+                        ),
+                    },
                 },
-            },
-            'quantity': 1,
-        }],
-        mode='payment',
-        success_url=success_url,
-        cancel_url=cancel_url,
-        customer_email=request.user.email,
-        metadata={'order_pk': str(order.pk)},
-    )
+                'quantity': 1,
+            }],
+            mode='payment',
+            success_url=success_url,
+            cancel_url=cancel_url,
+            customer_email=request.user.email,
+            metadata={'order_pk': str(order.pk)},
+        )
+    except Exception:
+        messages.error(request, 'Could not connect to our payment provider. Please try again or contact us.')
+        return redirect('orders:order_detail', pk=order.pk)
 
-    Payment.objects.create(
-        order=order,
-        amount=order.advance_amount,
-        gateway='stripe',
-        gateway_reference=session.id,
-        status=PaymentStatus.PENDING,
-    )
+    try:
+        Payment.objects.create(
+            order=order,
+            amount=order.advance_amount,
+            gateway='stripe',
+            gateway_reference=session.id,
+            status=PaymentStatus.PENDING,
+        )
+    except Exception:
+        logger.error(
+            'Stripe session %s was created for order %d but the local Payment row failed '
+            'to save — the webhook for this session will find no matching Payment row. '
+            'Reconcile manually.',
+            session.id, order.pk, exc_info=True,
+        )
+        messages.error(request, 'Could not connect to our payment provider. Please try again or contact us.')
+        return redirect('orders:order_detail', pk=order.pk)
 
     return redirect(session.url)
 
@@ -517,7 +551,11 @@ def stripe_webhook(request):
         event = stripe_lib.Webhook.construct_event(
             payload, sig_header, settings.STRIPE_WEBHOOK_SECRET
         )
-    except Exception:
+    except stripe_lib.error.SignatureVerificationError as exc:
+        logger.warning('Stripe webhook signature verification failed: %s', exc)
+        return HttpResponse(status=400)
+    except Exception as exc:
+        logger.error('Stripe webhook: unexpected error parsing event: %s', exc, exc_info=True)
         return HttpResponse(status=400)
 
     if event['type'] == 'checkout.session.completed':
@@ -541,6 +579,12 @@ def _handle_checkout_completed(session):
                 .get(gateway_reference=gateway_reference)
             )
         except Payment.DoesNotExist:
+            logger.error(
+                'Stripe webhook: checkout.session.completed for Stripe session %s has no '
+                'matching Payment row — a charge may have been captured with no local record. '
+                'Check the Stripe dashboard and reconcile manually.',
+                gateway_reference,
+            )
             return
 
         if payment.status == PaymentStatus.CAPTURED:
