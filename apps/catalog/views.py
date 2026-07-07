@@ -22,8 +22,10 @@ from .models import (
 
 
 def homepage(request):
+    from apps.core.models import BannerSlide
     cats = {c.kind: c for c in Category.objects.filter(is_active=True)}
-    return render(request, 'home.html', {'categories': cats})
+    slides = list(BannerSlide.objects.filter(is_active=True).order_by('order'))
+    return render(request, 'home.html', {'categories': cats, 'slides': slides})
 
 
 # ── Cakes ─────────────────────────────────────────────────────────────────────

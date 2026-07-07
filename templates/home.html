@@ -1,6 +1,162 @@
 {% extends 'base.html' %}
 {% block title %}Welcome — Our Store{% endblock %}
 {% block content %}
+
+{% if slides %}
+<section
+  id="hero-slider"
+  class="relative overflow-hidden rounded-2xl mb-10"
+  aria-label="Featured highlights"
+  aria-roledescription="carousel"
+>
+  <div
+    id="slider-track"
+    class="flex transition-transform duration-500 ease-in-out"
+    data-count="{{ slides|length }}"
+  >
+    {% for slide in slides %}
+    <div
+      class="min-w-full relative"
+      role="group"
+      aria-roledescription="slide"
+      aria-label="Slide {{ forloop.counter }} of {{ slides|length }}"
+    >
+      <img
+        src="{{ slide.image.url }}"
+        alt="{{ slide.headline }}"
+        class="w-full h-64 sm:h-80 lg:h-96 object-cover"
+      >
+      <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent flex items-end">
+        <div class="p-6 sm:p-10 max-w-xl">
+          {% if slide.headline %}
+          <h2 class="text-white text-2xl sm:text-4xl font-bold mb-2">{{ slide.headline }}</h2>
+          {% endif %}
+          {% if slide.subtext %}
+          <p class="text-white/90 text-sm sm:text-base mb-4">{{ slide.subtext }}</p>
+          {% endif %}
+          {% if slide.link_url and slide.button_label %}
+          <a
+            href="{{ slide.link_url }}"
+            class="inline-block bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-lg font-medium transition-colors"
+          >{{ slide.button_label }}</a>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if slides|length > 1 %}
+  <button
+    id="slider-prev"
+    class="absolute left-3 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/50 text-white rounded-full w-10 h-10 flex items-center justify-center transition-colors"
+    aria-label="Previous slide"
+  >
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5" aria-hidden="true">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5"/>
+    </svg>
+  </button>
+  <button
+    id="slider-next"
+    class="absolute right-3 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/50 text-white rounded-full w-10 h-10 flex items-center justify-center transition-colors"
+    aria-label="Next slide"
+  >
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5" aria-hidden="true">
+      <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5"/>
+    </svg>
+  </button>
+
+  <div
+    id="slider-dots"
+    class="absolute bottom-4 left-0 right-0 flex justify-center gap-2"
+    role="tablist"
+    aria-label="Slide navigation"
+  >
+    {% for slide in slides %}
+    <button
+      role="tab"
+      aria-selected="{% if forloop.first %}true{% else %}false{% endif %}"
+      aria-label="Go to slide {{ forloop.counter }}"
+      data-dot="{{ forloop.counter0 }}"
+      class="w-2.5 h-2.5 rounded-full bg-white transition-opacity {% if forloop.first %}opacity-100{% else %}opacity-50{% endif %}"
+    ></button>
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>
+
+<script>
+(function () {
+  var slider = document.getElementById('hero-slider');
+  if (!slider) return;
+  var track = document.getElementById('slider-track');
+  var total = parseInt(track.getAttribute('data-count'), 10);
+  if (total <= 1) return;
+
+  var prevBtn = document.getElementById('slider-prev');
+  var nextBtn = document.getElementById('slider-next');
+  var dots = Array.prototype.slice.call(document.querySelectorAll('#slider-dots [data-dot]'));
+  var INTERVAL = 5000;
+  var current = 0;
+  var timer = null;
+  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  if (reduced) {
+    track.style.transitionDuration = '0ms';
+  }
+
+  function goTo(n) {
+    current = ((n % total) + total) % total;
+    track.style.transform = 'translateX(-' + (current * 100) + '%)';
+    dots.forEach(function (dot, i) {
+      var active = i === current;
+      dot.setAttribute('aria-selected', active ? 'true' : 'false');
+      dot.classList.toggle('opacity-100', active);
+      dot.classList.toggle('opacity-50', !active);
+    });
+  }
+
+  function startTimer() {
+    if (reduced) return;
+    clearInterval(timer);
+    timer = setInterval(function () { goTo(current + 1); }, INTERVAL);
+  }
+
+  function stopTimer() { clearInterval(timer); timer = null; }
+
+  prevBtn.addEventListener('click', function () { goTo(current - 1); startTimer(); });
+  nextBtn.addEventListener('click', function () { goTo(current + 1); startTimer(); });
+
+  dots.forEach(function (dot) {
+    dot.addEventListener('click', function () {
+      goTo(parseInt(dot.getAttribute('data-dot'), 10));
+      startTimer();
+    });
+  });
+
+  slider.addEventListener('mouseenter', stopTimer);
+  slider.addEventListener('mouseleave', startTimer);
+  slider.addEventListener('focusin', stopTimer);
+  slider.addEventListener('focusout', startTimer);
+
+  var touchX = 0;
+  slider.addEventListener('touchstart', function (e) {
+    touchX = e.touches[0].clientX;
+  }, { passive: true });
+  slider.addEventListener('touchend', function (e) {
+    var dx = e.changedTouches[0].clientX - touchX;
+    if (Math.abs(dx) > 40) {
+      goTo(current + (dx < 0 ? 1 : -1));
+      startTimer();
+    }
+  });
+
+  goTo(0);
+  startTimer();
+}());
+</script>
+{% endif %}
+
 <div class="text-center py-10">
   <h1 class="text-4xl font-bold text-gray-900 mb-3">Welcome to Our Store</h1>
   <p class="text-lg text-gray-500 mb-12 max-w-xl mx-auto">

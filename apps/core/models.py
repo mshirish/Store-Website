@@ -120,3 +120,27 @@ class StoreClosure(models.Model):
             f'{self.date}: {self.special_open_time:%I:%M %p} – {self.special_close_time:%I:%M %p}'
             + (f' ({self.note})' if self.note else '')
         )
+
+
+# ── Hero banner slides ────────────────────────────────────────────────────────
+
+class BannerSlide(models.Model):
+    image = models.ImageField(upload_to='banners/')
+    headline = models.CharField(max_length=120, blank=True)
+    subtext = models.CharField(max_length=255, blank=True)
+    link_url = models.URLField(blank=True, help_text='URL the button links to.')
+    button_label = models.CharField(
+        max_length=60,
+        blank=True,
+        help_text='Button text; shown only when a link URL is set.',
+    )
+    order = models.PositiveSmallIntegerField(default=0, help_text='Lower numbers appear first.')
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = 'Banner Slide'
+        verbose_name_plural = 'Banner Slides'
+        ordering = ['order']
+
+    def __str__(self):
+        return self.headline or f'Slide {self.pk}'

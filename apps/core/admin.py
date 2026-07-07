@@ -1,6 +1,7 @@
 from django.contrib import admin
+from django.utils.html import mark_safe
 
-from .models import SiteConfiguration, StoreHours, StoreClosure
+from .models import BannerSlide, SiteConfiguration, StoreHours, StoreClosure
 
 
 @admin.register(SiteConfiguration)
@@ -55,3 +56,16 @@ class StoreClosureAdmin(admin.ModelAdmin):
     ordering = ('date',)
     search_fields = ('note',)
     date_hierarchy = 'date'
+
+
+@admin.register(BannerSlide)
+class BannerSlideAdmin(admin.ModelAdmin):
+    list_display = ('headline', 'order', 'is_active', 'image_preview')
+    list_editable = ('order', 'is_active')
+    ordering = ('order',)
+
+    @admin.display(description='Preview')
+    def image_preview(self, obj):
+        if obj.image:
+            return mark_safe(f'<img src="{obj.image.url}" style="height:40px;border-radius:3px;">')
+        return '—'
