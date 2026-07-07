@@ -15,6 +15,17 @@
     body { font-family: 'DM Sans', system-ui, -apple-system, sans-serif; }
     h1, h2, h3, h4, h5, h6 { font-family: 'Fraunces', Georgia, serif; }
   </style>
+  <!-- Animation bootstrap: add .js-anim to <html> BEFORE body renders so CSS
+       hides .anim-ready elements from first paint (no visible-then-hidden flash).
+       Skipped if IntersectionObserver is unsupported or prefers-reduced-motion is on;
+       without .js-anim the CSS never hides anything — full progressive enhancement. -->
+  <script>
+    (function () {
+      if (!('IntersectionObserver' in window)) return;
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      document.documentElement.classList.add('js-anim');
+    }());
+  </script>
   {% block extra_head %}{% endblock %}
 </head>
 <body class="bg-gray-50 text-gray-800 min-h-screen flex flex-col">
@@ -350,5 +361,69 @@
     });
   </script>
   {% block extra_js %}{% endblock %}
+
+  <!-- Scroll-into-view entry animations (IntersectionObserver).
+       Only runs if <html>.js-anim was set by the head script above. -->
+  <script>
+  (function () {
+    if (!document.documentElement.classList.contains('js-anim')) return;
+
+    var STAGGER_MS = 65;
+
+    /* ── Collect elements to animate ─────────────────────────────────────── */
+
+    // Card grids: product listings, homepage category tiles, catering cards
+    var cardEls = Array.from(document.querySelectorAll(
+      'main .grid > a, main .grid > div.shadow-sm, main .space-y-3 > a'
+    ));
+
+    // Page intro: first h1 per page + its immediate sibling subtitle paragraph
+    var introEls = Array.from(document.querySelectorAll('main h1, main h1 + p'));
+
+    // Hero slider (homepage only)
+    var hero = document.getElementById('hero-slider');
+
+    var all = cardEls.concat(introEls);
+    if (hero) all.push(hero);
+    if (!all.length) return;
+
+    /* ── Mark as ready (CSS now hides them) ──────────────────────────────── */
+    all.forEach(function (el) { el.classList.add('anim-ready'); });
+
+    /* ── IntersectionObserver ─────────────────────────────────────────────
+       Groups simultaneous entries by parent container so siblings
+       in the same grid/list stagger in sequence rather than all at once. */
+    var observer = new IntersectionObserver(function (entries) {
+      var groups = new Map();
+
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        observer.unobserve(entry.target);
+        var parent = entry.target.parentElement;
+        if (!groups.has(parent)) groups.set(parent, []);
+        groups.get(parent).push(entry.target);
+      });
+
+      groups.forEach(function (els) {
+        els.forEach(function (el, i) {
+          el.style.setProperty('--anim-delay', (i * STAGGER_MS) + 'ms');
+          el.classList.add('anim-in');
+
+          // After animation completes: remove classes so element is in plain
+          // document flow with no lingering animation state.
+          el.addEventListener('animationend', function () {
+            el.classList.remove('anim-ready', 'anim-in');
+            el.style.removeProperty('--anim-delay');
+          }, { once: true });
+        });
+      });
+    }, {
+      threshold: 0.08,
+      rootMargin: '0px 0px -20px 0px'
+    });
+
+    all.forEach(function (el) { observer.observe(el); });
+  }());
+  </script>
 </body>
 </html>
