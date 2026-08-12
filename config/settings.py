@@ -6,6 +6,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 env = environ.Env(
     DEBUG=(bool, False),
     ALLOWED_HOSTS=(list, ['localhost', '127.0.0.1']),
+    # Comma-separated full origins (scheme+host) trusted for CSRF form POSTs.
+    # Must include the ALB DNS URL when running behind a load balancer.
+    CSRF_TRUSTED_ORIGINS=(list, ['http://localhost']),
+    # Reverse-proxy / HTTPS gate — all OFF by default for HTTP deployments.
+    USE_X_FORWARDED_HOST=(bool, False),
+    SECURE_SSL_REDIRECT=(bool, False),
+    SESSION_COOKIE_SECURE=(bool, False),
+    CSRF_COOKIE_SECURE=(bool, False),
 )
 environ.Env.read_env(BASE_DIR / '.env')
 
@@ -13,6 +21,26 @@ environ.Env.read_env(BASE_DIR / '.env')
 SECRET_KEY = env('SECRET_KEY')
 DEBUG = env('DEBUG')
 ALLOWED_HOSTS = env('ALLOWED_HOSTS')
+# Full scheme+host origins allowed to POST forms through a reverse proxy (ALB).
+# Comma-separated, e.g. http://<alb-dns-name>,http://localhost:8000
+CSRF_TRUSTED_ORIGINS = env('CSRF_TRUSTED_ORIGINS')
+
+# ── Reverse-proxy / HTTPS ─────────────────────────────────────────────────────
+# Set USE_X_FORWARDED_HOST=true when behind an ALB/nginx so Django uses the
+# X-Forwarded-Host header for correct URL generation and redirects.
+USE_X_FORWARDED_HOST = env('USE_X_FORWARDED_HOST')
+
+# HTTPS_PROXY=true activates SECURE_PROXY_SSL_HEADER so Django trusts the
+# ALB's X-Forwarded-Proto: https header. Leave UNSET (or false) for an
+# HTTP-only lab — enabling it over plain HTTP breaks session/CSRF cookies.
+if env.bool('HTTPS_PROXY', default=False):
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# Env-gated so the same image works for the HTTP lab (all False) and a future
+# HTTPS deployment (set these to true in env alongside HTTPS_PROXY=true).
+SECURE_SSL_REDIRECT = env('SECURE_SSL_REDIRECT')
+SESSION_COOKIE_SECURE = env('SESSION_COOKIE_SECURE')
+CSRF_COOKIE_SECURE = env('CSRF_COOKIE_SECURE')
 
 # ── Applications ─────────────────────────────────────────────────────────────
 INSTALLED_APPS = [
