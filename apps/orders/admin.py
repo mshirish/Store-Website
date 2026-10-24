@@ -1,16 +1,9 @@
 from django.contrib import admin, messages
 from django.db import transaction
 from django.http import HttpResponseRedirect
-from django.utils import timezone
 
-from .models import Order, OrderItem, Payment, OrderStatus, PaymentStatus, STATUS_TRANSITIONS
-
-# States from which a pickup can legitimately be completed (advance already paid).
-COMPLETABLE_STATUSES = frozenset([
-    OrderStatus.CONFIRMED,
-    OrderStatus.PREPARING,
-    OrderStatus.READY,
-])
+from .models import ACTIVE_STATUSES, Order, OrderItem, Payment, OrderStatus, PaymentStatus, STATUS_TRANSITIONS
+from .services import complete_order_with_balance
 
 
 # ── Inlines ───────────────────────────────────────────────────────────────────
@@ -74,48 +67,33 @@ def advance_status(modeladmin, request, queryset):
                     pass
 
 
-@admin.action(description='Complete pickup — record balance paid + mark completed')
+@admin.action(description='Payment received & completed (balance paid + picked up)')
 def complete_pickup(modeladmin, request, queryset):
-    now = timezone.now()
     done = 0
     skipped = []
     for order in queryset:
-        if order.status not in COMPLETABLE_STATUSES:
+        try:
+            _, changed = complete_order_with_balance(order.pk, request.user)
+        except ValueError:
             skipped.append(str(order.pk))
             continue
-        with transaction.atomic():
-            update_fields = ['status', 'updated_at']
-            if not order.balance_paid_at:
-                order.balance_paid_at = now
-                order.balance_paid_by = request.user
-                update_fields += ['balance_paid_at', 'balance_paid_by']
-            order.status = OrderStatus.COMPLETED
-            order.save(update_fields=update_fields)
-        done += 1
+        done += changed
     if done:
-        modeladmin.message_user(request, f'{done} order(s) completed and balance recorded.')
+        modeladmin.message_user(request, f'{done} order(s) marked balance paid, picked up and completed.')
     if skipped:
         modeladmin.message_user(
             request,
-            f'Skipped {len(skipped)} order(s) not in a completable state (#{", #".join(skipped)}).',
+            f'Skipped {len(skipped)} order(s) without a paid advance or already cancelled (#{", #".join(skipped)}).',
             level=messages.WARNING,
         )
-
-
-@admin.action(description='Mark balance as paid (offline cash/card)')
-def mark_balance_paid(modeladmin, request, queryset):
-    now = timezone.now()
-    for order in queryset.filter(balance_paid_at__isnull=True):
-        order.balance_paid_at = now
-        order.balance_paid_by = request.user
-        order.save(update_fields=['balance_paid_at', 'balance_paid_by', 'updated_at'])
 
 
 @admin.action(description='Cancel selected orders')
 def cancel_orders(modeladmin, request, queryset):
     from apps.orders.emails import send_order_cancelled_email
-    # exclude already-terminal statuses so we never double-cancel or double-email
-    for order in queryset.exclude(status__in=[OrderStatus.COMPLETED, OrderStatus.CANCELLED]):
+    # Only active orders: terminal ones would be double-cancelled/emailed, and
+    # unpaid checkouts are discarded by reconcile_stripe_orders, not cancelled.
+    for order in queryset.filter(status__in=ACTIVE_STATUSES):
         # Neutralize any open Stripe sessions before cancelling so the webhook
         # cannot revive the order if a session completes within its TTL.
         order.payments.filter(status=PaymentStatus.PENDING).update(
@@ -152,7 +130,7 @@ class OrderAdmin(admin.ModelAdmin):
         'contact_phone',
     )
     date_hierarchy = 'pickup_date'
-    actions = [advance_status, complete_pickup, mark_balance_paid, cancel_orders]
+    actions = [advance_status, complete_pickup, cancel_orders]
     inlines = [OrderItemInline, PaymentInline]
 
     readonly_fields = (
@@ -165,6 +143,7 @@ class OrderAdmin(admin.ModelAdmin):
         'pickup_window_end',
         'balance_paid_at',
         'balance_paid_by',
+        'picked_up_at',
         'created_at',
         'updated_at',
     )
@@ -180,8 +159,8 @@ class OrderAdmin(admin.ModelAdmin):
         ('Financials', {
             'fields': ('order_total', 'tax_amount', 'advance_amount', 'balance_amount'),
         }),
-        ('Offline Balance Payment', {
-            'fields': ('balance_paid_at', 'balance_paid_by'),
+        ('Pickup & Balance (collected in person)', {
+            'fields': ('balance_paid_at', 'balance_paid_by', 'picked_up_at'),
         }),
         ('Notes', {
             'fields': ('notes',),
@@ -217,7 +196,7 @@ class OrderAdmin(admin.ModelAdmin):
         if object_id:
             try:
                 obj = self.get_object(request, object_id)
-                if obj and obj.status in COMPLETABLE_STATUSES:
+                if obj and obj.status in ACTIVE_STATUSES:
                     extra_context['show_complete_pickup_button'] = True
             except Exception:
                 pass
@@ -225,25 +204,18 @@ class OrderAdmin(admin.ModelAdmin):
 
     def response_change(self, request, obj):
         if '_complete_pickup' in request.POST:
-            if obj.status not in COMPLETABLE_STATUSES:
+            try:
+                _, changed = complete_order_with_balance(obj.pk, request.user)
+            except ValueError as exc:
+                self.message_user(request, str(exc), level=messages.ERROR)
+                return HttpResponseRedirect(request.path)
+            if changed:
                 self.message_user(
                     request,
-                    f'Order #{obj.pk} cannot be completed from status "{obj.get_status_display()}".',
-                    level=messages.ERROR,
+                    f'Order #{obj.pk}: balance received, picked up and completed (by {request.user}).',
                 )
-                return HttpResponseRedirect(request.path)
-            with transaction.atomic():
-                update_fields = ['status', 'updated_at']
-                if not obj.balance_paid_at:
-                    obj.balance_paid_at = timezone.now()
-                    obj.balance_paid_by = request.user
-                    update_fields += ['balance_paid_at', 'balance_paid_by']
-                obj.status = OrderStatus.COMPLETED
-                obj.save(update_fields=update_fields)
-            self.message_user(
-                request,
-                f'Order #{obj.pk} marked as completed. Balance recorded as paid by {request.user}.',
-            )
+            else:
+                self.message_user(request, f'Order #{obj.pk} was already completed.')
             return HttpResponseRedirect(request.path)
         return super().response_change(request, obj)
 

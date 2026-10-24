@@ -1,0 +1,7 @@
+{% if order.customer_status == 'completed' %}
+  <span class="inline-block bg-gray-100 text-gray-600 text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap">Completed</span>
+{% elif order.customer_status == 'cancelled' %}
+  <span class="inline-block bg-red-100 text-red-700 text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap">Cancelled</span>
+{% else %}
+  <span class="inline-block bg-green-100 text-green-700 text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap">Active</span>
+{% endif %}

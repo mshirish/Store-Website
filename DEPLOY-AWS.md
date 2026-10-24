@@ -131,9 +131,9 @@ The `collectstatic` step (automatic on start) writes files into `/app/staticfile
 
 ---
 
-## 4. Stripe webhook — action required
+## 4. Stripe webhook (recommended backup)
 
-The local `stripe listen` tunnel **does not exist** on AWS. After the Stripe checkout session completes, Stripe tries to POST to your webhook URL to confirm the payment. Without a registered endpoint, the webhook never fires and orders will stay in **Awaiting Payment** status even after the card is charged.
+Orders are confirmed when the customer returns from Stripe: the success page asks Stripe directly whether the Checkout Session is paid. That works with no webhook at all. The webhook is a **backup** for customers who close the tab before the redirect. Without it, those orders stay hidden until `reconcile_stripe_orders` runs (see below). Both paths share one idempotent confirm function, so an order is never confirmed or emailed twice.
 
 **To fix this for the lab:**
 
@@ -141,12 +141,19 @@ The local `stripe listen` tunnel **does not exist** on AWS. After the Stripe che
 2. Click **Add endpoint**
 3. Endpoint URL: `http://<alb-dns-name>/webhook/stripe/`
    *(trailing slash required)*
-4. Events to send: select `checkout.session.completed`
+4. Events to send: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.expired`
 5. After saving, copy the **Signing secret** (`whsec_...`) shown on the endpoint page
 6. Set that value as `STRIPE_WEBHOOK_SECRET` in your `.env` on the instance and restart the container:
    ```bash
    docker restart store
    ```
+
+**Reconcile / cleanup job.** Schedule this on the instance (e.g. cron every 15 minutes). It confirms any paid checkout that both the redirect and the webhook missed, and deletes abandoned unpaid ones. It is safe to run any time:
+
+```bash
+docker exec store python manage.py reconcile_stripe_orders
+# add --dry-run to preview, --audit to list paid Stripe sessions never applied to an order (refund candidates)
+```
 
 ---
 

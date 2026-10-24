@@ -12,12 +12,32 @@ class OrderStatus(models.TextChoices):
 
 
 # Forward path through the lifecycle (used by the admin advance-status action).
+# AWAITING_PAYMENT → CONFIRMED happens only via a verified Stripe payment, and
+# READY → COMPLETED only via the "Payment received & completed" admin button.
 STATUS_TRANSITIONS = {
-    OrderStatus.AWAITING_PAYMENT: OrderStatus.CONFIRMED,
     OrderStatus.CONFIRMED: OrderStatus.PREPARING,
     OrderStatus.PREPARING: OrderStatus.READY,
-    OrderStatus.READY: OrderStatus.COMPLETED,
 }
+
+# Advance paid, not yet picked up. Customers see all of these as "Active".
+ACTIVE_STATUSES = frozenset([
+    OrderStatus.CONFIRMED,
+    OrderStatus.PREPARING,
+    OrderStatus.READY,
+])
+
+
+class CustomerStatus(models.TextChoices):
+    ACTIVE = 'active', 'Active'
+    COMPLETED = 'completed', 'Completed'
+    CANCELLED = 'cancelled', 'Cancelled'
+
+
+class OrderQuerySet(models.QuerySet):
+    def visible_to_customer(self):
+        # AWAITING_PAYMENT orders are internal checkout scaffolding: they only
+        # become real orders once the advance is confirmed.
+        return self.exclude(status=OrderStatus.AWAITING_PAYMENT)
 
 
 class FulfillmentType(models.TextChoices):
@@ -77,6 +97,7 @@ class Order(models.Model):
         on_delete=models.SET_NULL,
         related_name='balance_payments_marked',
     )
+    picked_up_at = models.DateTimeField(null=True, blank=True)
 
     # Captured at checkout; not required at account registration.
     # Shown prominently in admin so staff can call about timing.
@@ -86,8 +107,22 @@ class Order(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    objects = OrderQuerySet.as_manager()
+
     class Meta:
         ordering = ['-created_at']
+
+    @property
+    def customer_status(self):
+        if self.status == OrderStatus.COMPLETED:
+            return CustomerStatus.COMPLETED
+        if self.status == OrderStatus.CANCELLED:
+            return CustomerStatus.CANCELLED
+        return CustomerStatus.ACTIVE
+
+    @property
+    def is_active(self):
+        return self.status in ACTIVE_STATUSES
 
     @property
     def pre_tax_subtotal(self):

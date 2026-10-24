@@ -267,7 +267,7 @@ templates/
   cart/
   catalog/
   checkout/     checkout.html, confirmation.html, _pickup_window.html
-  orders/       payment_success.html, payment_cancel.html
+  orders/       order_list.html, order_detail.html, _status_badge.html, payment_success.html
   emails/       Transactional email templates (txt)
 static/         Static assets
 ```
@@ -281,11 +281,16 @@ source .venv/bin/activate   # or .venv\Scripts\activate on Windows
 python manage.py runserver
 ```
 
-In a second terminal (for payment testing):
+Payments are confirmed on the Stripe success redirect, so checkout works
+without a webhook. To also exercise the backup webhook path, run in a second
+terminal:
 
 ```bash
 stripe listen --forward-to localhost:8000/webhook/stripe/
 ```
+
+`python manage.py reconcile_stripe_orders [--dry-run] [--audit]` confirms any
+paid-but-unconfirmed checkouts and removes abandoned unpaid ones.
 
 Verification and transactional emails are printed to the terminal console
 when `EMAIL_HOST` is not set in `.env`.

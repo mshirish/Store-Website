@@ -1,6 +1,7 @@
 import datetime
 import json
 import logging
+import time
 from decimal import Decimal, ROUND_HALF_UP
 
 logger = logging.getLogger(__name__)
@@ -12,7 +13,6 @@ from django.db import transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-from django.utils import timezone
 from django.utils.timezone import localdate
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
@@ -23,6 +23,7 @@ from apps.catalog.models import CategoryKind
 from apps.core.models import SiteConfiguration
 from apps.core.utils import get_next_open_day, get_pickup_window, is_open_on_date
 from .models import Order, OrderItem, OrderStatus, Payment, PaymentStatus
+from .services import abandon_pending_order, confirm_paid_session, retrieve_checkout_session
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -86,25 +87,6 @@ def _get_current_price(item):
     return None
 
 
-def _get_current_price_from_order_item(item):
-    """Live price for an OrderItem via its product FK. Returns None on any error."""
-    try:
-        kind = item.product.category.kind
-        if kind == CategoryKind.CAKE:
-            return item.product.cakeproduct.size_prices.get(size=item.cake_size).price
-        if kind == CategoryKind.MEAT:
-            return item.product.meatproduct.price_per_lb
-        if kind == CategoryKind.GROCERY:
-            return item.product.groceryproduct.unit_price
-        if kind == CategoryKind.CATERING:
-            return item.product.cateringproduct.options.get(
-                label=item.catering_option_label
-            ).price
-    except Exception:
-        return None
-    return None
-
-
 # ── Helpers (continued) ───────────────────────────────────────────────────────
 
 def _annotate_items(queryset):
@@ -130,18 +112,17 @@ def _annotate_items(queryset):
 
 @login_required
 def order_list(request):
-    orders = Order.objects.filter(customer=request.user).order_by('-created_at')
+    orders = Order.objects.visible_to_customer().filter(customer=request.user).order_by('-created_at')
     return render(request, 'orders/order_list.html', {'orders': orders})
 
 
 @login_required
 def order_detail(request, pk):
-    order = get_object_or_404(Order, pk=pk, customer=request.user)
+    order = get_object_or_404(Order.objects.visible_to_customer(), pk=pk, customer=request.user)
     items = _annotate_items(order.items.all())
     return render(request, 'orders/order_detail.html', {
         'order': order,
         'items': items,
-        'just_placed': request.GET.get('just_placed') == '1',
         'just_paid': request.GET.get('just_paid') == '1',
     })
 
@@ -290,7 +271,19 @@ def place_order(request):
     )
     balance_amount = order_total - advance_amount
 
-    # ── Create order ──────────────────────────────────────────────────────────
+    # ── Discard any earlier unfinished checkout ───────────────────────────────
+    # Only one pending checkout per customer. If Stripe says an earlier one was
+    # actually paid, it gets confirmed here instead and we stop.
+
+    for pending in Order.objects.filter(customer=request.user, status=OrderStatus.AWAITING_PAYMENT):
+        try:
+            if not abandon_pending_order(pending):
+                messages.success(request, f'Your payment for order #{pending.pk} went through.')
+                return redirect(reverse('orders:order_detail', kwargs={'pk': pending.pk}) + '?just_paid=1')
+        except Exception:
+            logger.warning('Could not verify earlier pending order #%d', pending.pk, exc_info=True)
+
+    # ── Create order (hidden until the advance is confirmed) ──────────────────
 
     with transaction.atomic():
         order = Order.objects.create(
@@ -323,11 +316,11 @@ def place_order(request):
                 catering_variant_choice=item.catering_variant_choice or '',
                 catering_special_requests=item.catering_special_requests,
             )
-        cart.items.all().delete()
+        # The cart is NOT cleared here: confirm_paid_session() empties it once
+        # the advance is paid, so abandoning Stripe leaves the cart intact.
 
-    # Immediately redirect to Stripe Checkout so the user pays without an
-    # intermediate "pay advance" page. On any Stripe error the order already
-    # exists and the order-detail page provides a retry button.
+    # Redirect to Stripe Checkout. The order stays invisible to the customer
+    # until the advance is confirmed (success redirect or webhook).
     import stripe as stripe_lib
     stripe_lib.api_key = settings.STRIPE_SECRET_KEY
 
@@ -338,7 +331,12 @@ def place_order(request):
         + '?session_id={CHECKOUT_SESSION_ID}'
     )
     cancel_url = request.build_absolute_uri(
-        reverse('orders:order_detail', kwargs={'pk': order.pk})
+        reverse('orders:payment_cancel', kwargs={'pk': order.pk})
+    )
+
+    payment_error = (
+        'We could not connect to our payment provider, so your order was not placed. '
+        'Your cart is unchanged. Please try again.'
     )
 
     try:
@@ -363,14 +361,14 @@ def place_order(request):
             cancel_url=cancel_url,
             customer_email=request.user.email,
             metadata={'order_pk': str(order.pk)},
+            # Stripe's minimum; lets abandoned checkouts be cleaned up quickly.
+            expires_at=int(time.time()) + 30 * 60,
         )
     except Exception:
-        messages.warning(
-            request,
-            'Your order was placed, but we could not connect to our payment provider. '
-            'Use the button below to complete your payment, or contact us for help.'
-        )
-        return redirect(reverse('orders:order_detail', kwargs={'pk': order.pk}))
+        logger.error('Stripe session creation failed for order %d', order.pk, exc_info=True)
+        order.delete()
+        messages.error(request, payment_error)
+        return redirect('orders:checkout')
 
     try:
         Payment.objects.create(
@@ -383,131 +381,70 @@ def place_order(request):
     except Exception:
         logger.error(
             'Stripe session %s was created for order %d but the local Payment row failed '
-            'to save — the webhook for this session will find no matching Payment row. '
-            'Reconcile manually.',
+            'to save. Expiring the session and discarding the order.',
             session.id, order.pk, exc_info=True,
         )
-        messages.warning(
-            request,
-            'Your order was placed, but we could not connect to our payment provider. '
-            'Use the button below to complete your payment, or contact us for help.'
-        )
-        return redirect(reverse('orders:order_detail', kwargs={'pk': order.pk}))
+        try:
+            stripe_lib.checkout.Session.expire(session.id)
+            order.delete()
+        except Exception:
+            logger.error('Could not expire Stripe session %s', session.id, exc_info=True)
+        messages.error(request, payment_error)
+        return redirect('orders:checkout')
 
     return redirect(session.url)
 
 
 @login_required
 def order_confirmation(request, pk):
-    order = get_object_or_404(Order, pk=pk, customer=request.user)
-    return redirect(reverse('orders:order_detail', kwargs={'pk': pk}) + '?just_placed=1')
-
-
-@login_required
-@require_POST
-def initiate_payment(request, pk):
-    import stripe as stripe_lib
-
-    order = get_object_or_404(Order, pk=pk, customer=request.user)
-
-    if order.status != OrderStatus.AWAITING_PAYMENT:
-        messages.info(request, 'This order has already been paid or cancelled.')
-        return redirect('orders:order_detail', pk=order.pk)
-
-    if order.payments.filter(status=PaymentStatus.CAPTURED).exists():
-        messages.info(request, 'Payment already received for this order.')
-        return redirect('orders:order_detail', pk=order.pk)
-
-    # Re-validate items via product FK (price or availability may have changed since order was placed)
-    order_items = list(order.items.select_related('product__category'))
-    errors = []
-    for item in order_items:
-        if not item.product_id:
-            continue
-        if not item.product.is_available:
-            errors.append(f'"{item.product_name}" is no longer available. Please contact us.')
-            continue
-        current_price = _get_current_price_from_order_item(item)
-        if current_price is not None and current_price != item.unit_price_snapshot:
-            errors.append(
-                f'Price for "{item.product_name}" has changed. '
-                'Please contact us to update your order.'
-            )
-    if errors:
-        for err in errors:
-            messages.error(request, err)
-        return redirect('orders:order_detail', pk=order.pk)
-
-    stripe_lib.api_key = settings.STRIPE_SECRET_KEY
-
-    success_url = (
-        request.build_absolute_uri(
-            reverse('orders:payment_success', kwargs={'pk': order.pk})
-        )
-        + '?session_id={CHECKOUT_SESSION_ID}'
-    )
-    cancel_url = request.build_absolute_uri(
-        reverse('orders:order_detail', kwargs={'pk': order.pk})
-    )
-
-    try:
-        session = stripe_lib.checkout.Session.create(
-            payment_method_types=['card'],
-            line_items=[{
-                'price_data': {
-                    'currency': 'usd',
-                    'unit_amount': int(order.advance_amount * 100),
-                    'product_data': {
-                        'name': f'Order #{order.pk} — Advance Payment',
-                        'description': (
-                            f'Advance for pickup on {order.pickup_date.strftime("%B %d, %Y")}. '
-                            f'Balance of ${order.balance_amount} due at pickup.'
-                        ),
-                    },
-                },
-                'quantity': 1,
-            }],
-            mode='payment',
-            success_url=success_url,
-            cancel_url=cancel_url,
-            customer_email=request.user.email,
-            metadata={'order_pk': str(order.pk)},
-        )
-    except Exception:
-        messages.error(request, 'Could not connect to our payment provider. Please try again or contact us.')
-        return redirect('orders:order_detail', pk=order.pk)
-
-    try:
-        Payment.objects.create(
-            order=order,
-            amount=order.advance_amount,
-            gateway='stripe',
-            gateway_reference=session.id,
-            status=PaymentStatus.PENDING,
-        )
-    except Exception:
-        logger.error(
-            'Stripe session %s was created for order %d but the local Payment row failed '
-            'to save — the webhook for this session will find no matching Payment row. '
-            'Reconcile manually.',
-            session.id, order.pk, exc_info=True,
-        )
-        messages.error(request, 'Could not connect to our payment provider. Please try again or contact us.')
-        return redirect('orders:order_detail', pk=order.pk)
-
-    return redirect(session.url)
+    get_object_or_404(Order.objects.visible_to_customer(), pk=pk, customer=request.user)
+    return redirect('orders:order_detail', pk=pk)
 
 
 @login_required
 def payment_success(request, pk):
+    """
+    Stripe success return. Verifies the payment with Stripe directly, so the
+    order is confirmed even if the webhook never arrives.
+    """
     order = get_object_or_404(Order, pk=pk, customer=request.user)
-    return redirect(reverse('orders:order_detail', kwargs={'pk': pk}) + '?just_paid=1')
+    session_id = request.GET.get('session_id', '')
+
+    if order.status == OrderStatus.AWAITING_PAYMENT and session_id:
+        # Only trust a session that we created for this order.
+        if order.payments.filter(gateway_reference=session_id).exists():
+            try:
+                confirm_paid_session(retrieve_checkout_session(session_id))
+            except Exception:
+                logger.warning(
+                    'Could not verify Stripe session %s for order %d on return',
+                    session_id, order.pk, exc_info=True,
+                )
+        order.refresh_from_db(fields=['status'])
+
+    if order.status != OrderStatus.AWAITING_PAYMENT:
+        return redirect(reverse('orders:order_detail', kwargs={'pk': pk}) + '?just_paid=1')
+
+    # Not confirmed yet (Stripe unreachable or payment still settling). This page
+    # refreshes itself, re-running the verification above.
+    return render(request, 'orders/payment_success.html', {'order': order})
 
 
 @login_required
 def payment_cancel(request, pk):
+    """Stripe cancel return: discard the unpaid checkout and go back to checkout."""
     order = get_object_or_404(Order, pk=pk, customer=request.user)
-    return render(request, 'orders/payment_cancel.html', {'order': order})
+    if order.status == OrderStatus.AWAITING_PAYMENT:
+        try:
+            if not abandon_pending_order(order):
+                return redirect(reverse('orders:order_detail', kwargs={'pk': pk}) + '?just_paid=1')
+        except Exception:
+            # Stripe unreachable: the order stays hidden and its session expires
+            # on its own; reconcile_stripe_orders removes it later.
+            logger.warning('Could not abandon pending order %d', pk, exc_info=True)
+        messages.info(request, 'Payment was not completed, so no order was placed. Your cart is unchanged.')
+        return redirect('orders:checkout')
+    return redirect('orders:order_detail', pk=pk)
 
 
 @login_required
@@ -515,18 +452,13 @@ def payment_cancel(request, pk):
 def cancel_order(request, pk):
     from apps.orders.emails import send_order_cancelled_email
 
-    order = get_object_or_404(Order, pk=pk, customer=request.user)
-
-    if order.status != OrderStatus.AWAITING_PAYMENT:
-        messages.error(request, 'Only orders awaiting payment can be cancelled.')
-        return redirect('orders:order_detail', pk=pk)
+    get_object_or_404(Order.objects.visible_to_customer(), pk=pk, customer=request.user)
 
     with transaction.atomic():
-        # Mark any open Stripe checkout sessions as failed so the webhook
-        # cannot revive this order if the session completes within its TTL.
-        order.payments.filter(status=PaymentStatus.PENDING).update(
-            status=PaymentStatus.FAILED
-        )
+        order = Order.objects.select_for_update().get(pk=pk)
+        if not order.is_active:
+            messages.error(request, 'Only active orders can be cancelled.')
+            return redirect('orders:order_detail', pk=pk)
         order.status = OrderStatus.CANCELLED
         order.save(update_fields=['status', 'updated_at'])
 
@@ -542,6 +474,10 @@ def cancel_order(request, pk):
 @csrf_exempt
 @require_POST
 def stripe_webhook(request):
+    """
+    Backup confirmation path. The success redirect normally confirms the order
+    first; both go through confirm_paid_session(), so the second one is a no-op.
+    """
     import stripe as stripe_lib
 
     payload = request.body
@@ -558,53 +494,26 @@ def stripe_webhook(request):
         logger.error('Stripe webhook: unexpected error parsing event: %s', exc, exc_info=True)
         return HttpResponse(status=400)
 
-    if event['type'] == 'checkout.session.completed':
+    if event['type'] in ('checkout.session.completed', 'checkout.session.async_payment_succeeded'):
         _handle_checkout_completed(event['data']['object'])
+    elif event['type'] == 'checkout.session.expired':
+        _handle_checkout_expired(event['data']['object'])
 
     return HttpResponse(status=200)
 
 
 def _handle_checkout_completed(session):
-    from apps.orders.emails import send_order_confirmed_email
+    confirm_paid_session(session)
 
-    gateway_reference = session['id']
-    order = None
 
-    with transaction.atomic():
+def _handle_checkout_expired(session):
+    payment = (
+        Payment.objects.select_related('order')
+        .filter(gateway_reference=session['id'], order__status=OrderStatus.AWAITING_PAYMENT)
+        .first()
+    )
+    if payment:
         try:
-            payment = (
-                Payment.objects
-                .select_for_update()
-                .select_related('order')
-                .get(gateway_reference=gateway_reference)
-            )
-        except Payment.DoesNotExist:
-            logger.error(
-                'Stripe webhook: checkout.session.completed for Stripe session %s has no '
-                'matching Payment row — a charge may have been captured with no local record. '
-                'Check the Stripe dashboard and reconcile manually.',
-                gateway_reference,
-            )
-            return
-
-        if payment.status == PaymentStatus.CAPTURED:
-            return  # idempotency guard
-
-        order = payment.order
-        if order.status != OrderStatus.AWAITING_PAYMENT:
-            return  # order was cancelled before payment completed
-
-        now = timezone.now()
-        payment.status = PaymentStatus.CAPTURED
-        payment.captured_at = now
-        payment.stripe_payment_intent_id = session.get('payment_intent')
-        payment.save(update_fields=['status', 'captured_at', 'stripe_payment_intent_id'])
-
-        order.status = OrderStatus.CONFIRMED
-        order.save(update_fields=['status', 'updated_at'])
-
-    if order:
-        try:
-            send_order_confirmed_email(order)
+            abandon_pending_order(payment.order)
         except Exception:
-            pass
+            logger.warning('Could not clean up expired checkout %s', session['id'], exc_info=True)
