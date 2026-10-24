@@ -107,16 +107,85 @@
   <div class="bg-green-50 border border-green-200 rounded-2xl p-5 mb-6">
     <p class="text-sm font-semibold text-green-800">Order active. Your advance is paid.</p>
     <p class="text-sm text-green-700">Balance due at pickup: <strong>${{ order.balance_amount }}</strong>, paid in store.</p>
-    <form method="post" action="{% url 'orders:cancel_order' pk=order.pk %}"
-          class="mt-4"
-          onsubmit="return confirm('Cancel order #{{ order.pk }}? This cannot be undone.')">
-      {% csrf_token %}
-      <button type="submit"
-              class="w-full bg-white hover:bg-red-50 text-red-600 border border-red-200 font-semibold py-2.5 rounded-xl transition-colors text-sm">
-        Cancel order
-      </button>
-    </form>
+    <!-- Opens the confirmation dialog (native invoker; JS fallback below) -->
+    <button type="button"
+            commandfor="cancel-order-dialog" command="show-modal"
+            data-open-dialog="cancel-order-dialog"
+            class="mt-4 w-full bg-white hover:bg-red-50 text-red-600 border border-red-200 font-semibold py-2.5 rounded-xl transition-colors text-sm">
+      Cancel order
+    </button>
+    <noscript>
+      <form method="post" action="{% url 'orders:cancel_order' pk=order.pk %}" class="mt-3">
+        {% csrf_token %}
+        <p class="text-sm text-green-800 mb-2">
+          Cancelling can't be undone. Your advance refund is arranged by the store, not on this website.
+          {% if site_config.contact_phone %}Please call us at {{ site_config.contact_phone }}.{% else %}Please contact the store.{% endif %}
+        </p>
+        <button type="submit"
+                class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2.5 rounded-xl transition-colors text-sm">
+          Yes, cancel order #{{ order.pk }}
+        </button>
+      </form>
+    </noscript>
   </div>
+
+  <dialog id="cancel-order-dialog" closedby="any"
+          aria-labelledby="cancel-order-title" aria-describedby="cancel-order-desc"
+          class="w-[calc(100%-2rem)] max-w-md bg-white rounded-2xl border border-gray-100 shadow-xl p-6 text-left backdrop:bg-black/50">
+    <h2 id="cancel-order-title" class="text-xl font-bold text-gray-900 mb-2">Cancel this order?</h2>
+    <div id="cancel-order-desc" class="space-y-3 text-sm text-gray-600">
+      <p>Order #{{ order.pk }} will be cancelled. This can't be undone.</p>
+      <div class="bg-green-50 border border-green-200 rounded-xl p-4 text-green-800">
+        <p class="font-semibold mb-1">About your ${{ order.advance_amount }} advance</p>
+        {% if site_config.contact_phone %}
+        <p>
+          Refunds are arranged by the store, not through the website.
+          Please call us at
+          <a href="tel:{{ site_config.contact_phone }}" class="font-semibold underline hover:no-underline whitespace-nowrap">{{ site_config.contact_phone }}</a>
+          to arrange your refund.
+        </p>
+        {% else %}
+        <p>
+          Refunds are arranged by the store, not through the website.
+          Please contact the store to arrange your refund{% if site_config.contact_email %} at
+          <a href="mailto:{{ site_config.contact_email }}" class="font-semibold underline hover:no-underline">{{ site_config.contact_email }}</a>{% endif %}.
+          Our contact details are at the bottom of this page.
+        </p>
+        {% endif %}
+      </div>
+    </div>
+    <div class="mt-6 flex flex-col-reverse sm:flex-row gap-3">
+      <form method="dialog" class="flex-1">
+        <button type="submit" autofocus
+                class="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2.5 rounded-xl transition-colors text-sm">
+          Keep order
+        </button>
+      </form>
+      <form method="post" action="{% url 'orders:cancel_order' pk=order.pk %}" class="flex-1">
+        {% csrf_token %}
+        <button type="submit"
+                class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2.5 rounded-xl transition-colors text-sm">
+          Yes, cancel order
+        </button>
+      </form>
+    </div>
+  </dialog>
+  <script>
+    // Fallbacks for browsers without invoker commands / closedby on <dialog>.
+    (function () {
+      var dialog = document.getElementById('cancel-order-dialog');
+      var opener = document.querySelector('[data-open-dialog="cancel-order-dialog"]');
+      if (!dialog || !opener) return;
+      if (!('command' in HTMLButtonElement.prototype)) {
+        opener.addEventListener('click', function () { dialog.showModal(); });
+      }
+      // A click whose target is the <dialog> itself landed on the backdrop.
+      dialog.addEventListener('click', function (e) {
+        if (e.target === dialog) dialog.close();
+      });
+      dialog.addEventListener('close', function () { opener.focus(); });
+    })();
+  </script>
   {% elif order.customer_status == 'completed' %}
   <div class="bg-gray-50 border border-gray-200 rounded-2xl p-5 mb-6">
     <p class="text-sm text-gray-600">This order is complete. Thank you for shopping with us!</p>

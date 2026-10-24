@@ -153,8 +153,16 @@ STATICFILES_DIRS = [BASE_DIR / 'static']
 # Directory where `collectstatic` writes files for production serving.
 # runserver ignores STATIC_ROOT; gunicorn (prod) needs it.
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-# WhiteNoise: serve compressed + fingerprinted static files in production.
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+STORAGES = {
+    # Django's default (local filesystem under MEDIA_ROOT), unchanged.
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
+    # WhiteNoise: serve compressed + fingerprinted static files in production.
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+    },
+}
 
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'

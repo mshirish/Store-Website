@@ -161,6 +161,33 @@ class CustomerVisibilityTests(OrderFlowTestBase):
             detail = self.client.get(reverse('orders:order_detail', kwargs={'pk': self.order.pk}))
             self.assertContains(detail, '>Active<')
 
+    def test_cancel_uses_themed_dialog_with_store_phone(self):
+        from apps.core.models import SiteConfiguration
+        config = SiteConfiguration.get()
+        config.contact_phone = '(555) 010-2030'
+        config.save()
+        Order.objects.filter(pk=self.order.pk).update(status=OrderStatus.CONFIRMED)
+
+        detail = self.client.get(reverse('orders:order_detail', kwargs={'pk': self.order.pk}))
+        cancel_url = reverse('orders:cancel_order', kwargs={'pk': self.order.pk})
+        self.assertNotContains(detail, 'confirm(')
+        self.assertContains(detail, '<dialog id="cancel-order-dialog"')
+        self.assertContains(detail, 'Cancel this order?')
+        self.assertContains(detail, 'href="tel:(555) 010-2030"')
+        self.assertContains(detail, f'<form method="post" action="{cancel_url}"')
+        self.assertContains(detail, '<form method="dialog"')
+
+    def test_cancel_dialog_falls_back_when_phone_blank(self):
+        from apps.core.models import SiteConfiguration
+        config = SiteConfiguration.get()
+        config.contact_phone = ''
+        config.save()
+        Order.objects.filter(pk=self.order.pk).update(status=OrderStatus.CONFIRMED)
+
+        detail = self.client.get(reverse('orders:order_detail', kwargs={'pk': self.order.pk}))
+        self.assertNotContains(detail, 'href="tel:')
+        self.assertContains(detail, 'Please contact the store to arrange your refund')
+
     def test_customer_can_cancel_active_order(self):
         Order.objects.filter(pk=self.order.pk).update(status=OrderStatus.PREPARING)
         self.client.post(reverse('orders:cancel_order', kwargs={'pk': self.order.pk}))
