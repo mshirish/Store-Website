@@ -26,12 +26,42 @@ def _get_or_create_cart(user):
     return cart
 
 
-def _htmx_row_and_totals(request, item, cart):
-    """Return HTMX response: updated row (main swap) + totals (OOB swap)."""
-    row_html = render_to_string('cart/_item_row.html', {'item': item}, request=request)
-    totals_html = render_to_string('cart/_totals.html', {'cart': cart}, request=request)
-    # _totals.html already wraps content in <div id="cart-totals" hx-swap-oob="true">
-    return HttpResponse(row_html + totals_html)
+def _htmx_line_and_totals(request, item, cart, corrected=False):
+    """
+    HTMX response made only of out-of-band fragments: the item's line total,
+    the cart totals card and, if the server had to correct the submitted
+    value, the quantity field itself. The <tr> is never re-sent: a response
+    starting with <tr> makes htmx parse it in table context, which breaks the
+    OOB <div>, and replacing the row would steal focus from the input.
+    """
+    html = render_to_string('cart/_line_total.html', {'item': item, 'oob': True}, request=request)
+    html += render_to_string('cart/_totals.html', {'cart': cart}, request=request)
+    if corrected:
+        html += render_to_string('cart/_qty_field.html', {'item': item, 'oob': True}, request=request)
+    return HttpResponse(html)
+
+
+# Largest value CartItem.quantity can store (max_digits=10, decimal_places=3).
+_MAX_QUANTITY = Decimal('9999999.999')
+
+
+def _parse_quantity(raw, by_weight):
+    """
+    Normalize a submitted quantity/weight. Returns a Decimal, or None when the
+    input is empty, non-numeric or too large (caller keeps the saved value).
+    Zero/negative values clamp to the minimum: 1 for counts, 0.001 lb for weight.
+    """
+    try:
+        value = Decimal((raw or '').strip())
+    except InvalidOperation:
+        return None
+    if not value.is_finite() or value > _MAX_QUANTITY:
+        return None
+    if by_weight:
+        return max(value.quantize(Decimal('0.001'), rounding=ROUND_HALF_UP), Decimal('0.001'))
+    if value != value.to_integral_value():
+        return None
+    return max(value, Decimal(1))
 
 
 # ── Cart page ─────────────────────────────────────────────────────────────────
@@ -107,46 +137,24 @@ def add_to_cart(request, product_pk):
 @require_POST
 def update_cart_item(request, item_pk):
     item = get_object_or_404(CartItem, pk=item_pk, cart__user=request.user)
+    corrected = False
 
-    if item.kind == CategoryKind.MEAT:
-        try:
-            w = Decimal(request.POST.get('weight', ''))
-            if w > 0:
-                item.quantity = w.quantize(Decimal('0.001'), rounding=ROUND_HALF_UP)
-                item.save(update_fields=['quantity', 'updated_at'])
-        except (InvalidOperation, ValueError):
-            pass
-
-    elif item.kind == CategoryKind.GROCERY:
-        try:
-            q = int(request.POST.get('quantity', ''))
-            if q > 0:
-                item.quantity = Decimal(q)
-                item.save(update_fields=['quantity', 'updated_at'])
-        except (ValueError, TypeError):
-            pass
-
-    elif item.kind == CategoryKind.CATERING:
-        if item.catering_pricing_mode == PricingMode.BY_WEIGHT:
-            try:
-                w = Decimal(request.POST.get('weight', ''))
-                if w > 0:
-                    item.quantity = w.quantize(Decimal('0.001'), rounding=ROUND_HALF_UP)
-                    item.save(update_fields=['quantity', 'updated_at'])
-            except (InvalidOperation, ValueError):
-                pass
-        else:
-            try:
-                q = int(request.POST.get('quantity', ''))
-                if q > 0:
-                    item.quantity = Decimal(q)
-                    item.save(update_fields=['quantity', 'updated_at'])
-            except (ValueError, TypeError):
-                pass
     # cake: quantity is fixed at 1, no update path
+    if item.kind in (CategoryKind.MEAT, CategoryKind.GROCERY, CategoryKind.CATERING):
+        raw = request.POST.get('weight' if item.is_by_weight else 'quantity', '')
+        quantity = _parse_quantity(raw, item.is_by_weight)
+        if quantity is not None and quantity != item.quantity:
+            item.quantity = quantity
+            item.save(update_fields=['quantity', 'updated_at'])
+        # Tell the client to show the value actually saved if it differs from
+        # what was typed (invalid → reverted, ≤0 → clamped, extra decimals → rounded).
+        try:
+            corrected = Decimal(raw.strip()) != item.quantity
+        except InvalidOperation:
+            corrected = True
 
     if request.headers.get('HX-Request'):
-        return _htmx_row_and_totals(request, item, item.cart)
+        return _htmx_line_and_totals(request, item, item.cart, corrected)
     return redirect('cart:cart')
 
 

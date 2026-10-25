@@ -1,0 +1,26 @@
+{% comment %}
+  Quantity/weight input. Saves via HTMX shortly after typing stops (only once
+  the value is valid) and on change/blur (the server corrects bad values).
+  hx-swap="none": the response is purely out-of-band (line total + totals),
+  so the input is never replaced while the customer is typing.
+{% endcomment %}
+<span id="qty-field-{{ item.pk }}"{% if oob %} hx-swap-oob="true"{% endif %} class="inline-flex items-center gap-2">
+  {% if item.is_by_weight %}
+    <input type="number" name="weight" value="{{ item.quantity|floatformat:-3 }}"
+           min="0.001" step="0.001" required inputmode="decimal" aria-label="Weight in pounds for {{ item.product_name }}"
+           hx-post="{% url 'cart:update' item.pk %}"
+           hx-trigger="input[this.checkValidity()] changed delay:500ms, change changed"
+           hx-sync="this:replace"
+           hx-swap="none"
+           class="w-20 border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
+    <span class="text-xs text-gray-500">lb</span>
+  {% else %}
+    <input type="number" name="quantity" value="{{ item.quantity|floatformat:0 }}"
+           min="1" step="1" required inputmode="numeric" aria-label="Quantity for {{ item.product_name }}"
+           hx-post="{% url 'cart:update' item.pk %}"
+           hx-trigger="input[this.checkValidity()] changed delay:500ms, change changed"
+           hx-sync="this:replace"
+           hx-swap="none"
+           class="w-16 border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
+  {% endif %}
+</span>

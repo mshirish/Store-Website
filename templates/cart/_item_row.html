@@ -27,52 +27,14 @@
   <td class="py-3 pr-2 md:pr-4">
     {% if item.kind == 'cake' %}
       <span class="text-sm text-gray-600">Qty: {{ item.quantity|floatformat:0 }}</span>
-    {% elif item.kind == 'meat' %}
-      <div class="flex items-center gap-2">
-        <input type="number" name="weight" value="{{ item.quantity|floatformat:-3 }}"
-               min="0.001" step="0.001"
-               hx-post="{% url 'cart:update' item.pk %}"
-               hx-target="closest tr"
-               hx-swap="outerHTML"
-               hx-trigger="input delay:400ms"
-               class="w-20 border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
-        <span class="text-xs text-gray-500">lb</span>
-      </div>
-    {% elif item.kind == 'grocery' %}
-      <input type="number" name="quantity" value="{{ item.quantity|floatformat:0 }}"
-             min="1" step="1"
-             hx-post="{% url 'cart:update' item.pk %}"
-             hx-target="closest tr"
-             hx-swap="outerHTML"
-             hx-trigger="input delay:400ms"
-             class="w-16 border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
-    {% elif item.kind == 'catering' %}
-      {% if item.catering_pricing_mode == 'by_weight' %}
-        <div class="flex items-center gap-2">
-          <input type="number" name="weight" value="{{ item.quantity|floatformat:-3 }}"
-                 min="0.001" step="0.001"
-                 hx-post="{% url 'cart:update' item.pk %}"
-                 hx-target="closest tr"
-                 hx-swap="outerHTML"
-                 hx-trigger="input delay:400ms"
-                 class="w-20 border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
-          <span class="text-xs text-gray-500">lb</span>
-        </div>
-      {% else %}
-        <input type="number" name="quantity" value="{{ item.quantity|floatformat:0 }}"
-               min="1" step="1"
-               hx-post="{% url 'cart:update' item.pk %}"
-               hx-target="closest tr"
-               hx-swap="outerHTML"
-               hx-trigger="input delay:400ms"
-               class="w-16 border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
-      {% endif %}
+    {% else %}
+      {% include 'cart/_qty_field.html' %}
     {% endif %}
   </td>
 
   <!-- Line total -->
   <td class="py-3 pr-2 md:pr-4 text-right font-semibold text-gray-900 whitespace-nowrap text-sm">
-    ${{ item.line_total }}
+    {% include 'cart/_line_total.html' %}
   </td>
 
   <!-- Remove -->
