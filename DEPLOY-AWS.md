@@ -16,11 +16,12 @@ SECRET_KEY=<generate: python -c "import secrets; print(secrets.token_urlsafe(50)
 DEBUG=false
 
 # ── Hosts & CSRF ──────────────────────────────────────────────────────────────
-# Include the ALB DNS name and the EC2 instance's private IP.
-# The ALB health-check probe comes from the private IP, so it must be listed.
-ALLOWED_HOSTS=localhost,127.0.0.1,<alb-dns-name>,<ec2-private-ip>
+# Include the ALB DNS name. The instance's private IP is NOT needed: set the
+# target group health-check path to /healthz/, which answers before Django
+# validates the Host header (and never touches the database).
+ALLOWED_HOSTS=localhost,127.0.0.1,<alb-dns-name>
 # Example:
-# ALLOWED_HOSTS=localhost,127.0.0.1,my-alb-123456789.us-east-1.elb.amazonaws.com,10.0.1.42
+# ALLOWED_HOSTS=localhost,127.0.0.1,my-alb-123456789.us-east-1.elb.amazonaws.com
 
 # Full scheme+host origins that may POST forms through the ALB.
 # HTTP lab: scheme is http, host is the ALB DNS name only.
@@ -124,7 +125,7 @@ docker logs -f store
 
 ## 3. Static files
 
-WhiteNoise is configured and active (`STATICFILES_STORAGE = CompressedManifestStaticFilesStorage`).
+WhiteNoise is configured and active (`STORAGES['staticfiles']` = `CompressedManifestStaticFilesStorage`).
 Gunicorn serves compressed, content-hashed static files directly — no nginx or S3 needed for this lab.
 
 The `collectstatic` step (automatic on start) writes files into `/app/staticfiles/` inside the container. WhiteNoise picks them up transparently. Nothing extra to configure.
