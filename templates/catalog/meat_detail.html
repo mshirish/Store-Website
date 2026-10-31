@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% block title %}{{ product.name }} — Our Store{% endblock %}
+{% block title %}{{ product.name }} — {{ store_name }}{% endblock %}
 {% block content %}
 <div class="mb-4">
   <a href="{% url 'catalog:meat_list' %}" class="text-sm text-green-700 hover:underline">&larr; Back to Meat</a>

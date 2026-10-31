@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% block title %}Welcome — Our Store{% endblock %}
+{% block title %}Welcome — {{ store_name }}{% endblock %}
 {% block content %}
 
 {% if slides %}
@@ -158,7 +158,7 @@
 {% endif %}
 
 <div class="text-center py-10">
-  <h1 class="text-4xl font-bold text-gray-900 mb-3">Welcome to Our Store</h1>
+  <h1 class="text-4xl font-bold text-gray-900 mb-3">Welcome to {{ store_name }}</h1>
   <p class="text-lg text-gray-500 mb-12 max-w-xl mx-auto">
     Fresh groceries, hand-crafted cakes, quality meats, and full-service catering for your events.
   </p>

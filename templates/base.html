@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{% block title %}Our Store{% endblock %}</title>
+  <title>{% block title %}{{ store_name }}{% endblock %}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600&display=swap" rel="stylesheet">
@@ -36,7 +36,7 @@
       <div class="flex items-center justify-between py-3 gap-3">
 
         <!-- Logo -->
-        <a href="{% url 'catalog:home' %}" class="text-xl font-bold text-green-700 tracking-tight shrink-0">Our Store</a>
+        <a href="{% url 'catalog:home' %}" class="text-xl font-bold text-green-700 tracking-tight shrink-0">{{ store_name }}</a>
 
         <!-- Right-side controls -->
         <div class="flex items-center gap-3">
@@ -172,7 +172,7 @@
 
         <!-- Store info -->
         <div>
-          <p class="text-base font-bold text-gray-900 mb-3">{{ site_config.site_name }}</p>
+          <p class="text-base font-bold text-gray-900 mb-3">{{ store_name }}</p>
           {% if site_config.contact_address %}
           <p class="text-sm text-gray-500 leading-relaxed mb-4">{{ site_config.contact_address }}</p>
           {% endif %}
@@ -248,7 +248,7 @@
       </div>
 
       <div class="border-t border-gray-100 pt-5 text-center text-xs text-gray-500">
-        &copy; {% now "Y" %} {{ site_config.site_name }}. All rights reserved.
+        &copy; {% now "Y" %} {{ store_name }}. All rights reserved.
       </div>
     </div>
   </footer>
