@@ -141,8 +141,9 @@ class PaymentStatus(models.TextChoices):
 
 class Payment(models.Model):
     """
-    Records the in-app advance payment transaction.
-    Designed for Stripe (gateway_reference = PaymentIntent ID); not wired in Phase 1.
+    Records the in-app advance payment transaction via Stripe Checkout.
+    gateway_reference = Checkout Session ID (the key confirm_paid_session() locks on);
+    stripe_payment_intent_id is filled in once the session is paid.
     """
     order = models.ForeignKey(Order, on_delete=models.PROTECT, related_name='payments')
     amount = models.DecimalField(max_digits=10, decimal_places=2)

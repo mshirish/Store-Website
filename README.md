@@ -1,296 +1,170 @@
-# Store Website
+# Levant Table
 
-Django + PostgreSQL web app for a grocery/bakery/meat store.
+A production-patterned e-commerce platform for a Middle-Eastern grocery, bakery, butcher, and caterer — built to demonstrate full-stack engineering, system design, and cloud/operations practice end to end.
 
-## Prerequisites
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![Django](https://img.shields.io/badge/Django-5.2-092E20?logo=django&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-containerized-2496ED?logo=docker&logoColor=white)
+![Status](https://img.shields.io/badge/demo-test--mode-orange)
 
-- Python 3.11+
-- PostgreSQL 15+
+> **Live demo:** _<your-app>.onrender.com_ · **Admin:** `/admin` (credentials on request) · Payments run in **Stripe test mode** — use card `4242 4242 4242 4242`, any future expiry, any CVC. No real charges.
 
 ---
 
-## Setup
+## The problem it solves
 
-### 1. Clone & create a virtual environment
+**Levant Table** is a (fictional) family-run store with four revenue streams under one roof — groceries, a custom-cake counter, meat by weight, and event catering. Its catering and custom-cake business runs on **phone calls and walk-ins**: orders get missed during busy hours, large orders no-show because nothing commits the customer, and staff lose hours to phone tag over cake details. This app is the answer — customers browse and order online, **pre-pay a deposit** to commit the order, choose a pickup window, and staff run the whole lifecycle from the admin back office.
+
+## What this project demonstrates
+
+- **System design** — a multi-table product hierarchy, snapshot-based order integrity, and a single canonical money function; deliberate modeling of four product types with genuinely different pricing rules.
+- **Reliability engineering** — an idempotent, three-path payment-confirmation flow that self-heals a dropped webhook; a load-balancer health endpoint designed to stay green during a database failover.
+- **Cloud & operations** — containerized, twelve-factor configuration, deployed on Render + Neon, with a full AWS reference architecture **designed and provisioned in Terraform** (see [`ARCHITECTURE.md`](./ARCHITECTURE.md)).
+- **Software engineering** — 28 tests with the payment gateway mocked, per-line tax math to the cent, and clean separation between HTTP views and service logic.
+
+---
+
+## Architecture at a glance
+
+The app is **deployed** on Render (web) + Neon (serverless Postgres). A full AWS architecture — ALB + Auto Scaling Group + RDS, provisioned with Terraform — is **designed and documented** separately as the "how this scales with the business" story; it is intentionally not the demo's runtime (see [`ARCHITECTURE.md`](./ARCHITECTURE.md)).
+
+```mermaid
+flowchart TD
+    C([Customer]) -->|browse · add to cart<br/>HTMX, server-rendered| Cart[(Cart · one per user)]
+    Cart -->|checkout: re-validate<br/>live prices & pickup window| PO[place_order]
+    PO -->|one transaction:<br/>create hidden AWAITING_PAYMENT order| Order[(Order + OrderItems<br/>prices, tax, pickup<br/>snapshotted & frozen)]
+    PO -->|advance only · 30-min expiry| Stripe[[Stripe Checkout]]
+
+    Stripe -->|success redirect<br/>re-fetches session| CP{{confirm_paid_session}}
+    Stripe -->|signed webhook| CP
+    Recon[reconcile command<br/>scheduled] --> CP
+
+    CP -->|select_for_update<br/>first caller wins, rest no-op| Order
+    CP -->|on_commit, exactly once| Email[Confirmation email]
+
+    Order -->|staff workflow| Admin[[Django Admin]]
+    Admin -->|advance → preparing → ready<br/>complete pickup + balance| Order
+
+    HZ[/healthz/] -.->|no host check · no DB<br/>for LB probes & failover| LB([Load balancer])
+```
+
+**Why three confirmation paths?** Payment confirmation never trusts the browser. The success redirect re-fetches the session from Stripe, a signed webhook acts as a backup, and a scheduled reconcile command sweeps up anything both missed. All three funnel through one `confirm_paid_session()` guarded by `select_for_update` — so an order is confirmed once, the advance is captured once, and the email is sent once, no matter which path arrives first or in what order. This is what lets the app survive a webhook that never fires (which is exactly what happens without a tunnel in local dev, and on any host where the webhook isn't wired).
+
+---
+
+## Key engineering decisions
+
+- **Multi-table inheritance for products.** A concrete `Product` base with `CakeProduct` / `MeatProduct` / `GroceryProduct` / `CateringProduct` subtypes — because the four kinds price differently (cakes by size, meat by the pound, grocery by unit, catering by tray *or* by weight) and diverge in their fields. One query path, four real shapes.
+- **Snapshotting for order integrity.** Cart and order line items capture name, unit price, size, flavor, and custom-cake choices **at add time** and never refresh from live data. Orders freeze totals, tax, the advance/balance split, and the pickup window at placement. Editing a product later never rewrites history; `OrderItem.product` is `PROTECT` + nullable so a sold product can't be deleted out from under an order.
+- **One canonical money function.** `compute_line_total(unit_price, qty)` — `Decimal`, `ROUND_HALF_UP` to cents — is the single source of truth, called by cart, checkout, and order creation. Tax is computed per line against each category's own `tax_rate`.
+- **Pickup windows as derived, snapshotted data.** Windows come from a date's `StoreClosure` override or the weekday's `StoreHours`, with a "next open day" rule and a 10 AM readiness floor; the computed window is frozen onto the order at placement because store hours are editable.
+- **Email-only auth, no anonymous carts.** Custom user model (email as the login field) via allauth; cart and checkout require login, so there's one durable cart per user and no session-merge complexity.
+
+## Operations & reliability
+
+- **Health endpoint built for load balancers.** `/healthz/` is served by middleware that runs **first** in the stack — it returns `ok` without host validation or any DB access, so it answers from a private IP behind an ALB and keeps returning 200 during a database failover. Application-grade liveness, not a static file.
+- **Twelve-factor config.** All configuration is env-driven via `django-environ`; `SECRET_KEY` and `DATABASE_URL` are required with no insecure fallback. Production security (proxy SSL header, SSL redirect, secure cookies) is **opt-in by env var**, so the *same image* runs HTTP in a lab and HTTPS in production without a code change.
+- **Container design.** `python:3.12-slim`, dependencies in a cached layer, runs as a **non-root** user restricted to `staticfiles/` and `media/`. The entrypoint runs migrations on start; `collectstatic` runs at startup (not build) so building needs no secrets. Served by gunicorn; static files by WhiteNoise with compressed, hashed filenames.
+- **Self-healing order recovery.** The `reconcile_stripe_orders` command reconciles every unconfirmed order against Stripe — confirming paid-but-unconfirmed orders, removing stale abandoned ones, and (with `--audit`) listing paid sessions never applied to an order as refund candidates. Designed to run on a schedule.
+
+---
+
+## Tech stack
+
+| Layer | Choice |
+|---|---|
+| Language / framework | Python 3.12, Django 5.2 |
+| Database | PostgreSQL 16 (Neon serverless in production) |
+| Payments | Stripe Checkout (test mode), webhook signature verification |
+| Frontend | Server-rendered Django templates + HTMX; Tailwind CSS 3.4 (compiled, committed); small vanilla JS |
+| Auth | django-allauth (email-only) |
+| Server / static | gunicorn + WhiteNoise (`CompressedManifestStaticFilesStorage`) |
+| Config | django-environ (`.env` + real env vars) |
+| Packaging | Docker + docker-compose |
+| Deploy | Render (web) + Neon (Postgres); AWS reference architecture in Terraform (designed) |
+
+---
+
+## Run it locally
+
+### With Docker (recommended)
 
 ```bash
 git clone <repo-url>
 cd store-website
-
-python -m venv .venv
-# Windows
-.venv\Scripts\activate
-# macOS / Linux
-source .venv/bin/activate
-
-pip install -r requirements.txt
+cp .env.example .env          # set SECRET_KEY and DB_PASSWORD; leave DATABASE_URL as-is (Compose overrides it)
+docker compose up --build     # builds, waits for Postgres, migrates, starts the dev server
 ```
 
-### 2. Create the PostgreSQL database
-
-```sql
-CREATE USER store_user WITH PASSWORD 'yourpassword';
-CREATE DATABASE store_db OWNER store_user;
-GRANT ALL PRIVILEGES ON DATABASE store_db TO store_user;
-```
-
-### 3. Configure environment variables
+App at **http://127.0.0.1:8000**. Then, in a second terminal, seed data and create an admin:
 
 ```bash
-cp .env.example .env
-```
-
-Edit `.env` and fill in real values:
-
-| Variable | Description |
-|---|---|
-| `SECRET_KEY` | A long random string (use `python -c "import secrets; print(secrets.token_urlsafe(50))"`) |
-| `DEBUG` | `True` for local dev, `False` in production |
-| `ALLOWED_HOSTS` | Comma-separated hostnames, e.g. `localhost,127.0.0.1` |
-| `DATABASE_URL` | `postgres://store_user:yourpassword@localhost:5432/store_db` |
-| `EMAIL_HOST` | SMTP host (leave blank to print emails to the terminal in dev) |
-| `STRIPE_PUBLISHABLE_KEY` | Test publishable key from Stripe Dashboard |
-| `STRIPE_SECRET_KEY` | Test secret key from Stripe Dashboard |
-| `STRIPE_WEBHOOK_SECRET` | `whsec_...` from `stripe listen` output (see below) |
-
-### 4. Run migrations
-
-```bash
-python manage.py migrate
-```
-
-### 5. Seed default data
-
-Populates cake flavors, one starter category per kind, store hours, and site configuration:
-
-```bash
-python manage.py seed
-```
-
-### 6. Create a superuser (store owner / admin)
-
-```bash
-python manage.py createsuperuser
-```
-
-Enter an email address and password when prompted.
-
-### 7. Start the development server
-
-```bash
-python manage.py runserver
-```
-
-- Admin panel: <http://127.0.0.1:8000/admin/>
-- Customer auth pages: <http://127.0.0.1:8000/accounts/>
-
----
-
-## Running with Docker
-
-### Prerequisites
-
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (includes both Docker and Docker Compose)
-
-### 1. Create your `.env` file
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` and fill in at minimum:
-
-| Variable | Notes |
-|---|---|
-| `SECRET_KEY` | Any long random string |
-| `DB_PASSWORD` | Pick anything — this is the dev Postgres container password |
-| `DB_NAME`, `DB_USER`, `DB_PORT` | Defaults in `.env.example` work as-is |
-| `DATABASE_URL` | Leave the `localhost` URL in place — Compose overrides it automatically |
-| `ACCOUNT_EMAIL_VERIFICATION` | Set to `none` for fast dev (no SMTP needed) |
-
-Stripe keys are optional until you need to test payments.
-
-### 2. Build and start
-
-```bash
-docker compose up --build
-```
-
-On first run this builds the image, starts Postgres, waits for it to be healthy, runs migrations, then starts the Django dev server. Subsequent starts skip the build unless you pass `--build` again.
-
-The app is available at **http://127.0.0.1:8000**.
-
-### 3. Seed default data and create a superuser
-
-Open a second terminal (while the containers are running):
-
-```bash
-# Seed store hours, categories, cake flavors, and site configuration
-docker compose exec web python manage.py seed
-
-# Create the admin user (enter email + password when prompted)
+docker compose exec web python manage.py seed           # categories, menu, store hours, demo products
 docker compose exec web python manage.py createsuperuser
 ```
 
-Any other management command works the same way:
+Set `ACCOUNT_EMAIL_VERIFICATION=none` in `.env` for fast local testing (no SMTP needed); with `EMAIL_HOST` blank, emails print to the console.
+
+### Testing a payment
+
+Payments confirm on the Stripe **success redirect**, so checkout works without a webhook. Use test card `4242 4242 4242 4242` (any future expiry, any CVC). To also exercise the backup webhook path, forward events with the Stripe CLI:
 
 ```bash
-docker compose exec web python manage.py <command>
+stripe listen --forward-to localhost:8000/webhook/stripe/   # copy the whsec_... into .env, then: docker compose restart web
 ```
 
-### 4. Code changes
-
-Source code is mounted directly into the container (`- .:/app`), so edits on the
-host reflect immediately via runserver's autoreload — no rebuild needed.
-
-If you add a new Python package, rebuild the image:
-
-```bash
-docker compose up --build
-```
-
-### 5. Database notes
-
-The Postgres data lives in a **named Docker volume** (`postgres_data`). This means:
-
-- `docker compose down` — stops containers; **data is preserved**
-- `docker compose down -v` — stops containers AND **deletes the volume** (full wipe)
-- Data from a previously native (non-Docker) Postgres install does **not** carry over. Start fresh with `seed` + `createsuperuser` as shown above.
-
-### 6. Stopping
-
-```bash
-docker compose down          # stop; keep data
-docker compose down -v       # stop; wipe database too
-```
-
-### 7. Stripe webhooks with Docker
-
-The Stripe CLI runs on the **host** (not inside Docker) and forwards to
-`localhost:8000`, which Docker maps directly to the container's port 8000. No
-changes to the Stripe setup are needed:
-
-```bash
-stripe listen --forward-to localhost:8000/webhook/stripe/
-```
-
-Copy the printed `whsec_...` value into `.env` as `STRIPE_WEBHOOK_SECRET`. If
-Django is already running, restart it:
-
-```bash
-docker compose restart web
-```
+More test cards: 3D Secure `4000 0025 0000 3155`, declined `4000 0000 0000 9995` ([full list](https://docs.stripe.com/testing)).
 
 ---
 
-## Testing Stripe payments locally
+## Deployment
 
-Stripe webhooks cannot reach `localhost` directly, so you need the Stripe CLI to
-forward events to your local server.
+**Live demo:** Render (web service, Docker) + Neon (serverless Postgres). Configuration is entirely env-var driven; the container reads `DATABASE_URL` (Neon's pooled connection string), `SECRET_KEY`, `ALLOWED_HOSTS`, and the Stripe test keys. Migrations run automatically on deploy via the entrypoint.
 
-### 1. Install the Stripe CLI
+**Reference architecture (designed, in Terraform):** an AWS deployment — ALB + Auto Scaling Group of containers + RDS Postgres, with CloudWatch monitoring and security-group segmentation — sized for the business's growth. The health endpoint, stateless app tier, env-gated security, and 30-minute checkout expiry were all built with that target in mind. Full rationale, diagram, and the Terraform in [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 
-Download from <https://docs.stripe.com/stripe-cli> and follow the instructions
-for your OS. Verify with:
+---
 
-```bash
-stripe --version
-```
+## Testing
 
-### 2. Log in
+28 tests (Django `TestCase`, Stripe mocked):
 
 ```bash
-stripe login
+docker compose exec web python manage.py test
 ```
 
-Follow the browser prompt to authorise the CLI with your Stripe account.
-
-### 3. Forward webhooks to your local server
-
-In a **separate terminal** (keep your Django server running in another):
-
-```bash
-stripe listen --forward-to localhost:8000/webhook/stripe/
-```
-
-The CLI prints a signing secret on startup, e.g.:
-
-```
-> Ready! Your webhook signing secret is whsec_abc123...
-```
-
-Copy that value into your `.env`:
-
-```
-STRIPE_WEBHOOK_SECRET=whsec_abc123...
-```
-
-Restart Django if it is already running.
-
-### 4. Place a test order and pay
-
-1. Sign in, add items to cart, and proceed through checkout.
-2. On the confirmation page click **Pay $X Advance**.
-3. On the Stripe-hosted page use the test card:
-   - Number: `4242 4242 4242 4242`
-   - Expiry: any future date (e.g. `12/34`)
-   - CVC: any 3 digits
-4. After payment, Stripe redirects you to the success page and the CLI terminal
-   logs the `checkout.session.completed` event being forwarded.
-5. Refresh the confirmation page — status should change to **Confirmed** and a
-   confirmation email should appear in the terminal (or your inbox if SMTP is
-   configured).
-
-### Other test cards
-
-| Scenario | Card number |
+| Suite | Covers |
 |---|---|
-| Payment requires 3D Secure | `4000 0025 0000 3155` |
-| Card declined | `4000 0000 0000 9995` |
+| `orders` (20) | Redirect-only confirmation; redirect + webhook in either order confirm exactly once; unpaid/foreign sessions ignored; cart survives checkout; customer-facing status mapping; abandoned-checkout handling (discard vs. paid-after-all); reconcile (paid / dry-run / stale / recent); complete-with-balance idempotency |
+| `cart` (6) | HTMX quantity/weight updates computed and rounded **server-side**, clamping, invalid input, ownership checks |
+| `core` (2) | `/healthz/` bypasses host and DB checks; other paths still enforce `ALLOWED_HOSTS` |
 
-Full list: <https://docs.stripe.com/testing>
+---
+
+## Known limitations & roadmap
+
+Deliberate scope choices for a demo, documented honestly:
+
+- **Media on local disk, not object storage.** User-uploaded images aren't served in production (WhiteNoise serves static, not media). The designed fix — S3 via `django-storages` — is documented but not wired, since the demo relies on seeded/fallback imagery.
+- **Refunds are manual.** Order cancellation emails the customer; the advance is refunded by staff in the Stripe dashboard. `PaymentStatus.REFUNDED` exists for when this is automated.
+- **Test-mode payments only.** The app is a public portfolio demo and never processes real cards.
+- **Coming next:** CI/CD via GitHub Actions (tests → deploy on green), the Terraform apply walkthrough, and S3-backed media.
 
 ---
 
 ## Project structure
 
 ```
-config/         Django project package (settings, urls, wsgi)
+config/          Django project package (settings, urls, wsgi) — single settings module
 apps/
-  accounts/     Custom User model (email login via django-allauth)
-  catalog/      Categories (with per-category tax_rate), products, flavors, size prices
-  core/         SiteConfiguration, StoreHours, StoreClosure, pickup-window logic
-  cart/         DB-backed cart (one per user)
-  orders/       Order, OrderItem, Payment, Stripe webhook handler
-templates/
-  base.html
-  cart/
-  catalog/
-  checkout/     checkout.html, confirmation.html, _pickup_window.html
-  orders/       order_list.html, order_detail.html, _status_badge.html, payment_success.html
-  emails/       Transactional email templates (txt)
-static/         Static assets
+  accounts/      Custom email-login User + manager
+  catalog/       Categories, product hierarchy, cake options, catering menu, storefront + search
+  cart/          Per-user cart, HTMX add/update/remove, canonical line-total function
+  orders/        Checkout, Order/OrderItem/Payment, Stripe service + webhook, emails, admin actions, reconcile
+  core/          SiteConfiguration, store hours/closures, banner slides, pickup-window logic, /healthz, seed
+templates/       Project-level templates
+static/          Tailwind source + compiled output.css (committed)
+Dockerfile · docker-compose.yml · entrypoint.sh
+ARCHITECTURE.md  Business case, cloud design, Terraform
 ```
-
----
-
-## Running after initial setup
-
-```bash
-source .venv/bin/activate   # or .venv\Scripts\activate on Windows
-python manage.py runserver
-```
-
-Payments are confirmed on the Stripe success redirect, so checkout works
-without a webhook. To also exercise the backup webhook path, run in a second
-terminal:
-
-```bash
-stripe listen --forward-to localhost:8000/webhook/stripe/
-```
-
-`python manage.py reconcile_stripe_orders [--dry-run] [--audit]` confirms any
-paid-but-unconfirmed checkouts and removes abandoned unpaid ones.
-
-Verification and transactional emails are printed to the terminal console
-when `EMAIL_HOST` is not set in `.env`.

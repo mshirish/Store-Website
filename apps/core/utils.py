@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import datetime
 
+from django.utils import timezone
+
 READINESS_FLOOR = datetime.time(10, 0)  # 10:00 AM — applies when pickup is the very next open day
 _MAX_SEARCH_DAYS = 60                   # safety limit when scanning for the next open day
 
@@ -50,11 +52,11 @@ def get_next_open_day(
 ) -> datetime.date | None:
     """
     Returns the first open business day strictly after from_date
-    (defaults to today). Searches up to _MAX_SEARCH_DAYS days ahead.
+    (defaults to today in the store's TIME_ZONE). Searches up to _MAX_SEARCH_DAYS days ahead.
     Returns None if no open day is found within that window.
     """
     if from_date is None:
-        from_date = datetime.date.today()
+        from_date = timezone.localdate()
 
     candidate = from_date + datetime.timedelta(days=1)
     for _ in range(_MAX_SEARCH_DAYS):
@@ -85,7 +87,7 @@ def get_pickup_window(
     open_time, close_time = base
 
     if today is None:
-        today = datetime.date.today()
+        today = timezone.localdate()
 
     next_open = get_next_open_day(today)
     if next_open == pickup_date:

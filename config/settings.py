@@ -136,7 +136,9 @@ if _email_host:
 else:
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
-DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='Our Store <noreply@example.com>')
+# Order emails use the SiteConfiguration store name as the sender name; only the
+# address part of this setting is used for them. allauth emails use it as-is.
+DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='noreply@example.com')
 
 # ── Stripe ────────────────────────────────────────────────────────────────────
 STRIPE_PUBLISHABLE_KEY = env('STRIPE_PUBLISHABLE_KEY', default='')

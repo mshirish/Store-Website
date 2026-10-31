@@ -6,12 +6,13 @@ from unittest import mock
 from django.contrib.auth import get_user_model
 from django.core import mail
 from django.core.management import call_command
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from apps.cart.models import Cart, CartItem
 from apps.catalog.models import Category, CategoryKind, Product
+from apps.core.models import SiteConfiguration
 from .models import Order, OrderStatus, Payment, PaymentStatus
 from .services import complete_order_with_balance
 
@@ -193,6 +194,16 @@ class CustomerVisibilityTests(OrderFlowTestBase):
         self.client.post(reverse('orders:cancel_order', kwargs={'pk': self.order.pk}))
         self.order.refresh_from_db()
         self.assertEqual(self.order.status, OrderStatus.CANCELLED)
+
+    @override_settings(DEFAULT_FROM_EMAIL='Ignored Name <orders@example.com>')
+    def test_cancel_email_uses_store_name(self):
+        SiteConfiguration.objects.update_or_create(pk=1, defaults={'site_name': 'Levant Table'})
+        Order.objects.filter(pk=self.order.pk).update(status=OrderStatus.CONFIRMED)
+        self.client.post(reverse('orders:cancel_order', kwargs={'pk': self.order.pk}))
+
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].from_email, 'Levant Table <orders@example.com>')
+        self.assertTrue(mail.outbox[0].body.rstrip().endswith('Levant Table'))
 
 
 class AbandonedCheckoutTests(OrderFlowTestBase):

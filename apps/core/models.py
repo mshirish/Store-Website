@@ -5,8 +5,11 @@ from django.db import models
 
 # ── Site configuration (singleton) ───────────────────────────────────────────
 
+DEFAULT_STORE_NAME = 'Our Store'
+
+
 class SiteConfiguration(models.Model):
-    site_name = models.CharField(max_length=200, default='Our Store')
+    site_name = models.CharField(max_length=200, default=DEFAULT_STORE_NAME)
     advance_percentage = models.DecimalField(
         max_digits=5,
         decimal_places=2,
@@ -42,6 +45,11 @@ class SiteConfiguration(models.Model):
     def get(cls):
         obj, _ = cls.objects.get_or_create(pk=1)
         return obj
+
+    @property
+    def store_name(self):
+        # Falls back to the default so nothing renders an empty name.
+        return self.site_name.strip() or DEFAULT_STORE_NAME
 
     def __str__(self):
         return self.site_name
