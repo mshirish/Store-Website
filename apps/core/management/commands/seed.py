@@ -11,6 +11,9 @@ Seeds:
   - CateringProduct / CateringOption / CateringVariant (full menu)
   - Custom Cake product (with default size prices)
   - CakeOptionGroup / CakeOptionChoice (Fruit Topping, Outer Layer)
+  - Storefront CakeProducts (5, with 6"/8"/9"/10" size prices)
+  - MeatProducts (5, priced per lb)
+  - GroceryProducts (25, unit-priced)
 
 After seeding, any items requiring owner confirmation are printed as warnings.
 """
@@ -305,9 +308,73 @@ _PRODUCTS = [
      [], None),
 ]
 
+# ── Storefront seed data ──────────────────────────────────────────────────────
+
+# (name, description, (6", 8", 9", 10" prices))
+_CAKES = [
+    ('Pistachio Cake',
+     'Light sponge layered with pistachio cream and topped with crushed pistachios.',
+     ('34.00', '49.00', '59.00', '69.00')),
+    ('Baklava Cake',
+     'Honey-soaked layers inspired by classic baklava, with walnuts and a hint of cinnamon.',
+     ('36.00', '52.00', '62.00', '72.00')),
+    ('Chocolate Ganache Cake',
+     'Rich chocolate cake finished with a glossy dark chocolate ganache.',
+     ('32.00', '47.00', '57.00', '67.00')),
+    ('Vanilla Rosewater Cake',
+     'Vanilla sponge with a delicate rosewater cream.',
+     ('32.00', '47.00', '57.00', '67.00')),
+    ('Date & Walnut Cake',
+     'Moist date cake with toasted walnuts.',
+     ('30.00', '45.00', '55.00', '65.00')),
+]
+
+# (name, description, price_per_lb)
+_MEATS = [
+    ('Chicken Breast',       'Boneless, skinless chicken breast.',           '5.99'),
+    ('Ground Beef',          'Freshly ground beef, 85% lean.',               '6.99'),
+    ('Lamb Chops',           'Tender lamb rib chops.',                       '15.99'),
+    ('Beef Shawarma Strips', 'Thin-sliced beef, ready to marinate and sear.', '10.99'),
+    ('Chicken Thighs',       'Boneless, skinless chicken thighs.',           '4.99'),
+]
+
+# (name, description, unit_price)
+_GROCERIES = [
+    # Pantry / oils
+    ('Extra Virgin Olive Oil',  '1 L bottle',  '14.99'),
+    ('Tahini',                  '16 oz jar',   '7.99'),
+    ('Pomegranate Molasses',    '10 oz bottle', '5.99'),
+    ('Rose Water',              '10 oz bottle', '3.99'),
+    ('Orange Blossom Water',    '10 oz bottle', '3.99'),
+    ('Sumac',                   '7 oz bag',    '4.99'),
+    ('Zaatar Spice Blend',      '7 oz bag',    '5.99'),
+    ('Seven Spice (Baharat)',   '3.5 oz bag',  '4.49'),
+    # Grains / legumes
+    ('Basmati Rice',            '5 lb bag',    '9.99'),
+    ('Bulgur Wheat',            '2 lb bag',    '4.49'),
+    ('Red Lentils',             '2 lb bag',    '3.99'),
+    ('Chickpeas (canned)',      '15 oz can',   '1.79'),
+    ('Fava Beans (canned)',     '15 oz can',   '1.99'),
+    ('Vermicelli',              '16 oz bag',   '2.49'),
+    # Breads / bakery
+    ('Pita Bread',              'Pack of 6',   '2.99'),
+    ('Markook Bread',           'Pack of 4',   '4.49'),
+    ('Sesame Bread Rings (Kaak)', 'Pack of 6', '5.49'),
+    # Dairy / refrigerated
+    ('Labneh',                  '16 oz tub',   '5.99'),
+    ('Halloumi Cheese',         '8 oz pack',   '6.99'),
+    ('Feta Cheese',             '16 oz tub',   '7.49'),
+    ('Greek Yogurt',            '32 oz tub',   '5.49'),
+    # Preserves / snacks
+    ('Kalamata Olives',         '16 oz jar',   '6.99'),
+    ('Stuffed Grape Leaves (jar)', '2 lb jar', '7.99'),
+    ('Date Syrup',              '16 oz bottle', '6.49'),
+    ('Mixed Nuts (roasted)',    '1 lb bag',    '12.99'),
+]
+
 
 class Command(BaseCommand):
-    help = 'Seed default flavors, categories, store hours, site configuration, and catering menu.'
+    help = 'Seed default flavors, categories, store hours, site configuration, catering menu, and storefront products.'
 
     def handle(self, *args, **options):
         self.stdout.write('Seeding data...')
@@ -319,6 +386,9 @@ class Command(BaseCommand):
         flagged = self._seed_catering_products()
         self._seed_custom_cake()
         self._seed_cake_option_groups()
+        self._seed_cakes()
+        self._seed_meats()
+        self._seed_groceries()
         self.stdout.write(self.style.SUCCESS('Done.'))
 
         if flagged:
@@ -560,3 +630,86 @@ class Command(BaseCommand):
                 )
                 if c_created:
                     self.stdout.write(f'    [choice] {label}')
+
+    # ── Storefront products ───────────────────────────────────────────────────
+
+    def _starter_category(self, kind):
+        from apps.catalog.models import Category
+
+        # Lowest pk = the starter created by _seed_categories, even if the
+        # owner has since added more categories of the same kind.
+        return Category.objects.filter(kind=kind).order_by('pk').first()
+
+    def _seed_cakes(self):
+        from apps.catalog.models import CakeProduct, CakeSizePrice, CakeSize, CategoryKind
+
+        cake_category = self._starter_category(CategoryKind.CAKE)
+        if not cake_category:
+            self.stdout.write(self.style.ERROR('  [cake] No CAKE category found.'))
+            return
+
+        sizes = [CakeSize.SIX_INCH, CakeSize.EIGHT_INCH, CakeSize.NINE_INCH, CakeSize.TEN_INCH]
+
+        for name, description, prices in _CAKES:
+            product, created = CakeProduct.objects.get_or_create(
+                name=name,
+                is_custom=False,
+                defaults={
+                    'category': cake_category,
+                    'description': description,
+                    'is_available': True,
+                },
+            )
+            if created:
+                self.stdout.write(f'  [cake] Created: {name}')
+
+            for size, price_str in zip(sizes, prices):
+                _, sp_created = CakeSizePrice.objects.get_or_create(
+                    cake_product=product,
+                    size=size,
+                    defaults={'price': Decimal(price_str)},
+                )
+                if sp_created:
+                    self.stdout.write(f'    [size_price] {size}: ${price_str}')
+
+    def _seed_meats(self):
+        from apps.catalog.models import MeatProduct, CategoryKind
+
+        meat_category = self._starter_category(CategoryKind.MEAT)
+        if not meat_category:
+            self.stdout.write(self.style.ERROR('  [meat] No MEAT category found.'))
+            return
+
+        for name, description, price_str in _MEATS:
+            _, created = MeatProduct.objects.get_or_create(
+                name=name,
+                defaults={
+                    'category': meat_category,
+                    'description': description,
+                    'price_per_lb': Decimal(price_str),
+                    'is_available': True,
+                },
+            )
+            if created:
+                self.stdout.write(f'  [meat] Created: {name} (${price_str}/lb)')
+
+    def _seed_groceries(self):
+        from apps.catalog.models import GroceryProduct, CategoryKind
+
+        grocery_category = self._starter_category(CategoryKind.GROCERY)
+        if not grocery_category:
+            self.stdout.write(self.style.ERROR('  [grocery] No GROCERY category found.'))
+            return
+
+        for name, description, price_str in _GROCERIES:
+            _, created = GroceryProduct.objects.get_or_create(
+                name=name,
+                defaults={
+                    'category': grocery_category,
+                    'description': description,
+                    'unit_price': Decimal(price_str),
+                    'is_available': True,
+                },
+            )
+            if created:
+                self.stdout.write(f'  [grocery] Created: {name} (${price_str})')
