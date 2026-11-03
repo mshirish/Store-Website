@@ -1,5 +1,6 @@
 from pathlib import Path
 import environ
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -158,7 +159,7 @@ STATICFILES_DIRS = [BASE_DIR / 'static']
 # runserver ignores STATIC_ROOT; gunicorn (prod) needs it.
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STORAGES = {
-    # Django's default (local filesystem under MEDIA_ROOT), unchanged.
+    # Media: local filesystem under MEDIA_ROOT; swapped for R2 below when configured.
     'default': {
         'BACKEND': 'django.core.files.storage.FileSystemStorage',
     },
@@ -170,6 +171,38 @@ STORAGES = {
 
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
+# ── Media on Cloudflare R2 (optional) ────────────────────────────────────────
+# When the R2 bucket and keys are set, uploads go to R2 and .url points at the
+# bucket's public URL. Otherwise media stays on the local filesystem above.
+# Static files are unaffected and always served by WhiteNoise.
+R2_ACCESS_KEY_ID = env('R2_ACCESS_KEY_ID', default='')
+R2_SECRET_ACCESS_KEY = env('R2_SECRET_ACCESS_KEY', default='')
+R2_BUCKET_NAME = env('R2_BUCKET_NAME', default='')
+R2_ENDPOINT_URL = env('R2_ENDPOINT_URL', default='')
+R2_PUBLIC_URL = env('R2_PUBLIC_URL', default='')
+
+USE_R2 = bool(R2_BUCKET_NAME and R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY)
+
+if USE_R2:
+    # Fail at startup rather than uploading somewhere unreachable.
+    if not (R2_ENDPOINT_URL and R2_PUBLIC_URL):
+        raise ImproperlyConfigured(
+            'R2_ENDPOINT_URL and R2_PUBLIC_URL must be set when R2 media storage is enabled.'
+        )
+    # S3Storage is django-storages' boto3 backend (S3Boto3Storage is its legacy alias).
+    STORAGES['default'] = {'BACKEND': 'storages.backends.s3.S3Storage'}
+    AWS_ACCESS_KEY_ID = R2_ACCESS_KEY_ID
+    AWS_SECRET_ACCESS_KEY = R2_SECRET_ACCESS_KEY
+    AWS_STORAGE_BUCKET_NAME = R2_BUCKET_NAME
+    AWS_S3_ENDPOINT_URL = R2_ENDPOINT_URL
+    AWS_S3_REGION_NAME = 'auto'          # R2 requires "auto"
+    AWS_S3_SIGNATURE_VERSION = 's3v4'
+    AWS_DEFAULT_ACL = None               # R2 rejects ACL headers
+    AWS_QUERYSTRING_AUTH = False         # public, unsigned URLs
+    # Host (and optional path) only, e.g. pub-xxxx.r2.dev
+    AWS_S3_CUSTOM_DOMAIN = R2_PUBLIC_URL.split('://', 1)[-1].rstrip('/')
+    AWS_S3_FILE_OVERWRITE = False
 
 # ── Misc ──────────────────────────────────────────────────────────────────────
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

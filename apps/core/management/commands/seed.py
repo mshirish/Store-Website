@@ -14,12 +14,16 @@ Seeds:
   - Storefront CakeProducts (5, with 6"/8"/9"/10" size prices)
   - MeatProducts (5, priced per lb)
   - GroceryProducts (25, unit-priced)
+  - Category cover images and BannerSlides, from seed_images/ at the repo root
 
 After seeding, any items requiring owner confirmation are printed as warnings.
 """
 import datetime
+import re
 from decimal import Decimal
 
+from django.conf import settings
+from django.core.files import File
 from django.core.management.base import BaseCommand
 
 # ── Catering seed data ────────────────────────────────────────────────────────
@@ -372,6 +376,20 @@ _GROCERIES = [
     ('Mixed Nuts (roasted)',    '1 lb bag',    '12.99'),
 ]
 
+# ── Seed images (seed_images/ at the repo root) ───────────────────────────────
+
+_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp', '.gif', '.avif'}
+
+# CategoryKind value -> accepted file stems in seed_images/categories/
+_CATEGORY_COVER_STEMS = [
+    ('cake',     ('cakes', 'cake')),
+    ('meat',     ('meat', 'meats')),
+    ('grocery',  ('grocery', 'groceries')),
+    ('catering', ('catering',)),
+]
+
+_BANNER_SUBTEXT = 'Cakes, catering, fresh meat and Middle-Eastern groceries.'
+
 
 class Command(BaseCommand):
     help = 'Seed default flavors, categories, store hours, site configuration, catering menu, and storefront products.'
@@ -389,6 +407,8 @@ class Command(BaseCommand):
         self._seed_cakes()
         self._seed_meats()
         self._seed_groceries()
+        self._seed_category_covers()
+        self._seed_banner_slides()
         self.stdout.write(self.style.SUCCESS('Done.'))
 
         if flagged:
@@ -713,3 +733,71 @@ class Command(BaseCommand):
             )
             if created:
                 self.stdout.write(f'  [grocery] Created: {name} (${price_str})')
+
+    # ── Seed images ───────────────────────────────────────────────────────────
+    # Saved through the ImageField, so files go to whichever storage is
+    # configured (R2 or the local filesystem).
+
+    @staticmethod
+    def _image_files(directory, stem='*'):
+        if not directory.is_dir():
+            return []
+        return sorted(
+            p for p in directory.glob(f'{stem}.*')
+            if p.is_file() and p.suffix.lower() in _IMAGE_EXTENSIONS
+        )
+
+    def _seed_category_covers(self):
+        directory = settings.BASE_DIR / 'seed_images' / 'categories'
+
+        for kind, stems in _CATEGORY_COVER_STEMS:
+            category = self._starter_category(kind)
+            if category is None:
+                self.stdout.write(self.style.WARNING(f'  [cover] No {kind} category; skipped.'))
+                continue
+            if category.cover_image:
+                self.stdout.write(f'  [cover] Skipped: {category.name} already has a cover')
+                continue
+
+            matches = [p for stem in stems for p in self._image_files(directory, stem)]
+            if not matches:
+                self.stdout.write(self.style.WARNING(
+                    f'  [cover] No image for {category.name} '
+                    f'(looked for {", ".join(s + ".*" for s in stems)} in {directory}); skipped.'
+                ))
+                continue
+
+            path = matches[0]
+            with path.open('rb') as fh:
+                category.cover_image.save(path.name, File(fh), save=True)
+            self.stdout.write(f'  [cover] Attached: {category.name} <- {path.name}')
+
+    def _seed_banner_slides(self):
+        from apps.core.models import BannerSlide, SiteConfiguration
+
+        directory = settings.BASE_DIR / 'seed_images' / 'banners'
+        files = self._image_files(directory, 'banner*')
+        if not files:
+            self.stdout.write(self.style.WARNING(f'  [banner] No banner images in {directory}; skipped.'))
+            return
+
+        # Natural order, so banner10 sorts after banner2.
+        files.sort(key=lambda p: [int(t) if t.isdigit() else t for t in re.split(r'(\d+)', p.stem.lower())])
+        headline = f'Fresh from {SiteConfiguration.get().store_name}'
+
+        for position, path in enumerate(files, start=1):
+            # Matches banners/<stem><ext> plus the "_abc1234" suffix storage adds
+            # when the name was already taken, so a re-run never re-uploads.
+            stored_name = (
+                rf'^banners/{re.escape(path.stem)}(_[A-Za-z0-9]{{7}})?{re.escape(path.suffix)}$'
+            )
+            if BannerSlide.objects.filter(image__regex=stored_name).exists():
+                self.stdout.write(f'  [banner] Skipped: {path.name} already has a slide')
+                continue
+
+            slide = BannerSlide(
+                headline=headline, subtext=_BANNER_SUBTEXT, order=position, is_active=True,
+            )
+            with path.open('rb') as fh:
+                slide.image.save(path.name, File(fh), save=True)
+            self.stdout.write(f'  [banner] Created: slide {position} <- {path.name}')
