@@ -28,6 +28,7 @@ class SiteConfiguration(models.Model):
     )
     facebook_url = models.URLField(blank=True, help_text='Full URL including https://')
     instagram_url = models.URLField(blank=True, help_text='Full URL including https://')
+    youtube_url = models.URLField(blank=True, help_text='Full URL including https://')
 
     class Meta:
         verbose_name = 'Site Configuration'

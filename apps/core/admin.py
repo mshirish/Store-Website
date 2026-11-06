@@ -17,8 +17,8 @@ class SiteConfigurationAdmin(admin.ModelAdmin):
             'description': 'Shown in the site footer. Leave a field blank to hide it.',
         }),
         ('Social links', {
-            'fields': ('facebook_url', 'instagram_url'),
-            'description': 'Full URLs (e.g. https://facebook.com/yourpage). Leave blank to hide the icon.',
+            'fields': ('instagram_url', 'facebook_url', 'youtube_url'),
+            'description': 'Full URLs (e.g. https://facebook.com/yourpage). Leave blank to link the icon to the home page.',
         }),
     )
 
