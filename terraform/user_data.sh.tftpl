@@ -39,7 +39,7 @@ ENVEOF
 
 # ── Build and run ─────────────────────────────────────────────────────────────
 # No prod compose file in the repo: production is the Dockerfile's own CMD
-# (collectstatic + gunicorn on :8000), run the same way as DEPLOY-AWS.md.
+# (collectstatic + gunicorn on :8000), started with docker run (see ARCHITECTURE.md).
 cd /opt/app
 docker build -t store-app:latest .
 
