@@ -1,0 +1,55 @@
+#!/bin/bash
+# Boot script for an app instance (Amazon Linux 2023). Rendered by Terraform's
+# templatefile(); output is logged to /var/log/cloud-init-output.log.
+set -euxo pipefail
+
+# ── Docker, compose plugin, git ───────────────────────────────────────────────
+dnf install -y docker git
+systemctl enable --now docker
+
+# AL2023 doesn't package the compose plugin; install the official binary.
+mkdir -p /usr/local/lib/docker/cli-plugins
+curl -fsSL "https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-$(uname -m)" \
+  -o /usr/local/lib/docker/cli-plugins/docker-compose
+chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+# ── Code ──────────────────────────────────────────────────────────────────────
+git clone --depth 1 "${repo_url}" /opt/app
+
+# ── Production environment ────────────────────────────────────────────────────
+# Read by `docker run --env-file`: one KEY=value per line, no quotes. The quoted
+# heredoc stops the shell from expanding any $ inside secrets.
+umask 077
+cat > /opt/app/.env <<'ENVEOF'
+DEBUG=False
+SECRET_KEY=${django_secret_key}
+ALLOWED_HOSTS=${alb_dns_name},localhost,127.0.0.1
+CSRF_TRUSTED_ORIGINS=http://${alb_dns_name}
+DATABASE_URL=${database_url}
+# No SMTP in the lab (console email backend), so mandatory verification would lock users out.
+ACCOUNT_EMAIL_VERIFICATION=none
+STRIPE_PUBLISHABLE_KEY=${stripe_publishable_key}
+STRIPE_SECRET_KEY=${stripe_secret_key}
+R2_ACCESS_KEY_ID=${r2_access_key_id}
+R2_SECRET_ACCESS_KEY=${r2_secret_access_key}
+R2_BUCKET_NAME=${r2_bucket_name}
+R2_ENDPOINT_URL=${r2_endpoint_url}
+R2_PUBLIC_URL=${r2_public_url}
+ENVEOF
+
+# ── Build and run ─────────────────────────────────────────────────────────────
+# No prod compose file in the repo: production is the Dockerfile's own CMD
+# (collectstatic + gunicorn on :8000), run the same way as DEPLOY-AWS.md.
+cd /opt/app
+docker build -t store-app:latest .
+
+# Seed once before starting the app. The entrypoint runs `migrate` first, so the
+# schema exists; seed itself is idempotent.
+docker run --rm --env-file /opt/app/.env store-app:latest python manage.py seed
+
+docker run -d \
+  --name store \
+  --env-file /opt/app/.env \
+  -p ${app_port}:8000 \
+  --restart unless-stopped \
+  store-app:latest

@@ -53,3 +53,13 @@ Thumbs.db
 .coverage
 htmlcov/
 .pytest_cache/
+
+# Terraform (state and variable files hold secrets; the lock file is committed)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+!terraform.tfvars.example
+crash.log
+crash.*.log

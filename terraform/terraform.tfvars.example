@@ -1,0 +1,58 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is git-ignored — never commit real values.
+
+# AWS region to deploy into
+region = "us-east-2"
+
+# VPC address range
+vpc_cidr = "10.0.0.0/16"
+
+# Your public IP for SSH (curl https://checkip.amazonaws.com), as /32; "" disables SSH
+my_ip_cidr = "203.0.113.10/32"
+
+# Existing EC2 key pair name in this region; "" for none
+key_name = "my-key-pair"
+
+# App server size
+instance_type = "t3.small"
+
+# RDS size
+db_instance_class = "db.t3.micro"
+
+# Postgres database name (letters, digits, underscores)
+db_name = "store_db"
+
+# Postgres master username
+db_username = "store_user"
+
+# Postgres master password: 8+ chars, no / @ " or spaces
+db_password = "CHANGE-ME-strong-password"
+
+# Django SECRET_KEY: python -c "import secrets; print(secrets.token_urlsafe(50))"
+django_secret_key = "CHANGE-ME-long-random-string"
+
+# Stripe TEST publishable key
+stripe_publishable_key = "pk_test_..."
+
+# Stripe TEST secret key
+stripe_secret_key = "sk_test_..."
+
+# R2 access key ID (leave all R2 values "" to store media on the instance)
+r2_access_key_id = ""
+
+# R2 secret access key
+r2_secret_access_key = ""
+
+# R2 bucket name
+r2_bucket_name = ""
+
+# R2 S3 endpoint, e.g. https://<account-id>.r2.cloudflarestorage.com
+r2_endpoint_url = ""
+
+# R2 bucket public URL, e.g. https://pub-xxxx.r2.dev
+r2_public_url = ""
+
+# Public repo cloned onto each instance
+repo_url = "https://github.com/mshirish/Store-Website.git"
+
+# Host port the container is published on (ALB target port)
+app_port = 8000
