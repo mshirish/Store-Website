@@ -7,6 +7,7 @@ A production-patterned e-commerce platform for a Middle-Eastern grocery, bakery,
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-containerized-2496ED?logo=docker&logoColor=white)
 ![Status](https://img.shields.io/badge/demo-test--mode-orange)
+[![CI](https://github.com/mshirish/Store-Website/actions/workflows/ci.yml/badge.svg)](https://github.com/mshirish/Store-Website/actions/workflows/ci.yml)
 
 > **Live demo:** [levant-table.onrender.com](https://levant-table.onrender.com) (free instance: the first request can take about a minute while it wakes up) · **Admin:** `/admin` (credentials on request) · Payments run in **Stripe test mode** — use card `4242 4242 4242 4242`, any future expiry, any CVC. No real charges.
 
@@ -134,6 +135,8 @@ More test cards: 3D Secure `4000 0025 0000 3155`, declined `4000 0000 0000 9995`
 docker compose exec web python manage.py test
 ```
 
+CI ([`.github/workflows/ci.yml`](./.github/workflows/ci.yml)) runs the same suite on every push and pull request, plus `terraform fmt -check` and `terraform validate`.
+
 | Suite | Covers |
 |---|---|
 | `orders` (21) | Redirect-only confirmation; redirect + webhook in either order confirm exactly once; unpaid/foreign sessions ignored; cart survives checkout; customer-facing status mapping; abandoned-checkout handling (discard vs. paid-after-all); reconcile (paid / dry-run / stale / recent); complete-with-balance idempotency; cancellation email signed with the store name |
@@ -149,7 +152,8 @@ Deliberate scope choices for a demo, documented honestly:
 - **Media storage is environment-dependent.** In production, uploads go to Cloudflare R2 through `django-storages` and are served from the bucket's public URL. With the `R2_*` variables blank (local development) media falls back to the filesystem, which is only served while `DEBUG=True`.
 - **Refunds are manual.** Order cancellation emails the customer; the advance is refunded by staff in the Stripe dashboard. `PaymentStatus.REFUNDED` exists for when this is automated.
 - **Test-mode payments only.** The app is a public portfolio demo and never processes real cards.
-- **Coming next:** CI/CD via GitHub Actions (tests → deploy on green).
+- **CI:** GitHub Actions runs the test suite against Postgres 16 and `terraform fmt` / `validate` on every push and pull request.
+- **Coming next:** deploy to Render automatically when CI is green.
 
 ---
 
