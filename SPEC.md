@@ -15,7 +15,7 @@ Implemented:
 - Customer order history, order detail and self-service cancellation
 - Admin workflow: advance status, mark ready (emails the customer), complete pickup with offline balance, cancel
 - Email notifications: order confirmed, ready for pickup, cancelled
-- Docker image (gunicorn + WhiteNoise), docker-compose for development, AWS EC2/ALB/RDS deployment (see DEPLOY-AWS.md)
+- Docker image (gunicorn + WhiteNoise), docker-compose for development, AWS ALB/Auto Scaling/RDS reference architecture provisioned with Terraform (see ARCHITECTURE.md)
 
 Implemented vs. planned:
 

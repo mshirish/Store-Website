@@ -7,8 +7,9 @@ A production-patterned e-commerce platform for a Middle-Eastern grocery, bakery,
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-containerized-2496ED?logo=docker&logoColor=white)
 ![Status](https://img.shields.io/badge/demo-test--mode-orange)
+[![CI](https://github.com/mshirish/Store-Website/actions/workflows/ci.yml/badge.svg)](https://github.com/mshirish/Store-Website/actions/workflows/ci.yml)
 
-> **Live demo:** _<your-app>.onrender.com_ · **Admin:** `/admin` (credentials on request) · Payments run in **Stripe test mode** — use card `4242 4242 4242 4242`, any future expiry, any CVC. No real charges.
+> **Live demo:** [levant-table.onrender.com](https://levant-table.onrender.com) (free instance: the first request can take about a minute while it wakes up) · **Admin:** `/admin` (credentials on request) · Payments run in **Stripe test mode** — use card `4242 4242 4242 4242`, any future expiry, any CVC. No real charges.
 
 ---
 
@@ -20,14 +21,14 @@ A production-patterned e-commerce platform for a Middle-Eastern grocery, bakery,
 
 - **System design** — a multi-table product hierarchy, snapshot-based order integrity, and a single canonical money function; deliberate modeling of four product types with genuinely different pricing rules.
 - **Reliability engineering** — an idempotent, three-path payment-confirmation flow that self-heals a dropped webhook; a load-balancer health endpoint designed to stay green during a database failover.
-- **Cloud & operations** — containerized, twelve-factor configuration, deployed on Render + Neon, with a full AWS reference architecture **designed and provisioned in Terraform** (see [`ARCHITECTURE.md`](./ARCHITECTURE.md)).
-- **Software engineering** — 28 tests with the payment gateway mocked, per-line tax math to the cent, and clean separation between HTTP views and service logic.
+- **Cloud & operations** — containerized, twelve-factor configuration, deployed on Render + Neon; an AWS reference architecture (ALB + Auto Scaling group + RDS) was **provisioned with Terraform and verified end to end (load balancing, health checks, instance self-healing), then torn down to save cost** (see [`ARCHITECTURE.md`](./ARCHITECTURE.md)).
+- **Software engineering** — 31 tests with the payment gateway mocked, per-line tax math to the cent, and clean separation between HTTP views and service logic.
 
 ---
 
 ## Architecture at a glance
 
-The app is **deployed** on Render (web) + Neon (serverless Postgres). A full AWS architecture — ALB + Auto Scaling Group + RDS, provisioned with Terraform — is **designed and documented** separately as the "how this scales with the business" story; it is intentionally not the demo's runtime (see [`ARCHITECTURE.md`](./ARCHITECTURE.md)).
+The app is **deployed** on Render (web) + Neon (serverless Postgres), with media on Cloudflare R2. An AWS reference architecture — ALB + Auto Scaling group + RDS — was provisioned with Terraform and verified end to end (load balancing, health checks, instance self-healing), then torn down to save cost; it is not the demo's runtime (see [`ARCHITECTURE.md`](./ARCHITECTURE.md)).
 
 ```mermaid
 flowchart TD
@@ -49,7 +50,7 @@ flowchart TD
     HZ[/healthz/] -.->|no host check · no DB<br/>for LB probes & failover| LB([Load balancer])
 ```
 
-**Why three confirmation paths?** Payment confirmation never trusts the browser. The success redirect re-fetches the session from Stripe, a signed webhook acts as a backup, and a scheduled reconcile command sweeps up anything both missed. All three funnel through one `confirm_paid_session()` guarded by `select_for_update` — so an order is confirmed once, the advance is captured once, and the email is sent once, no matter which path arrives first or in what order. This is what lets the app survive a webhook that never fires (which is exactly what happens without a tunnel in local dev, and on any host where the webhook isn't wired).
+**Why three confirmation paths?** Payment confirmation never trusts the browser. The success redirect re-fetches the session from Stripe, a signed webhook acts as a backup, and a scheduled reconcile command sweeps up anything both missed. All three funnel through one `confirm_paid_session()` guarded by `select_for_update` — so an order is confirmed once, the advance is captured once, and the email is sent once, no matter which path arrives first or in what order. This is what lets the app survive a webhook that never fires (which is exactly what happens without a tunnel in local dev, and on any host where the webhook isn't wired). On the live site the webhook is configured at `/webhook/stripe/`, so the redirect and the webhook both confirm orders automatically.
 
 ---
 
@@ -82,7 +83,7 @@ flowchart TD
 | Server / static | gunicorn + WhiteNoise (`CompressedManifestStaticFilesStorage`) |
 | Config | django-environ (`.env` + real env vars) |
 | Packaging | Docker + docker-compose |
-| Deploy | Render (web) + Neon (Postgres); AWS reference architecture in Terraform (designed) |
+| Deploy | Render (web) + Neon (Postgres) + Cloudflare R2 (media); AWS reference architecture provisioned with Terraform and verified end to end (load balancing, health checks, instance self-healing), then torn down to save cost ([`ARCHITECTURE.md`](./ARCHITECTURE.md)) |
 
 ---
 
@@ -120,25 +121,27 @@ More test cards: 3D Secure `4000 0025 0000 3155`, declined `4000 0000 0000 9995`
 
 ## Deployment
 
-**Live demo:** Render (web service, Docker) + Neon (serverless Postgres). Configuration is entirely env-var driven; the container reads `DATABASE_URL` (Neon's pooled connection string), `SECRET_KEY`, `ALLOWED_HOSTS`, and the Stripe test keys. Migrations run automatically on deploy via the entrypoint.
+**Live demo:** Render (web service, Docker) + Neon (serverless Postgres). Configuration is entirely env-var driven; the container reads `DATABASE_URL` (Neon's pooled connection string), `SECRET_KEY`, `ALLOWED_HOSTS`, the Stripe test keys and webhook secret, and the `R2_*` variables for media. Uploaded media is stored in Cloudflare R2 via `django-storages` and served from the bucket's public URL. The Stripe webhook is configured at `/webhook/stripe/`. Migrations run automatically on deploy via the entrypoint.
 
-**Reference architecture (designed, in Terraform):** an AWS deployment — ALB + Auto Scaling Group of containers + RDS Postgres, with CloudWatch monitoring and security-group segmentation — sized for the business's growth. The health endpoint, stateless app tier, env-gated security, and 30-minute checkout expiry were all built with that target in mind. Full rationale, diagram, and the Terraform in [`ARCHITECTURE.md`](./ARCHITECTURE.md).
+**AWS reference architecture (Terraform):** VPC across 2 AZs, an internet-facing ALB, an Auto Scaling group of Docker hosts and private RDS Postgres, with security-group segmentation (ALB → app → database). It was provisioned with Terraform and verified end to end (load balancing, health checks, instance self-healing), then torn down to save cost. The health endpoint, stateless app tier and env-gated security were built with that target in mind. Diagram, Terraform layout, apply walkthrough and screenshots in [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 
 ---
 
 ## Testing
 
-28 tests (Django `TestCase`, Stripe mocked):
+31 tests (Django `TestCase`, Stripe mocked):
 
 ```bash
 docker compose exec web python manage.py test
 ```
 
+CI ([`.github/workflows/ci.yml`](./.github/workflows/ci.yml)) runs the same suite on every push and pull request, plus `terraform fmt -check` and `terraform validate`.
+
 | Suite | Covers |
 |---|---|
-| `orders` (20) | Redirect-only confirmation; redirect + webhook in either order confirm exactly once; unpaid/foreign sessions ignored; cart survives checkout; customer-facing status mapping; abandoned-checkout handling (discard vs. paid-after-all); reconcile (paid / dry-run / stale / recent); complete-with-balance idempotency |
+| `orders` (21) | Redirect-only confirmation; redirect + webhook in either order confirm exactly once; unpaid/foreign sessions ignored; cart survives checkout; customer-facing status mapping; abandoned-checkout handling (discard vs. paid-after-all); reconcile (paid / dry-run / stale / recent); complete-with-balance idempotency; cancellation email signed with the store name |
 | `cart` (6) | HTMX quantity/weight updates computed and rounded **server-side**, clamping, invalid input, ownership checks |
-| `core` (2) | `/healthz/` bypasses host and DB checks; other paths still enforce `ALLOWED_HOSTS` |
+| `core` (4) | `/healthz/` bypasses host and DB checks; other paths still enforce `ALLOWED_HOSTS`; pickup windows use the store's time zone (not UTC) at the date boundary |
 
 ---
 
@@ -146,10 +149,11 @@ docker compose exec web python manage.py test
 
 Deliberate scope choices for a demo, documented honestly:
 
-- **Media on local disk, not object storage.** User-uploaded images aren't served in production (WhiteNoise serves static, not media). The designed fix — S3 via `django-storages` — is documented but not wired, since the demo relies on seeded/fallback imagery.
+- **Media storage is environment-dependent.** In production, uploads go to Cloudflare R2 through `django-storages` and are served from the bucket's public URL. With the `R2_*` variables blank (local development) media falls back to the filesystem, which is only served while `DEBUG=True`.
 - **Refunds are manual.** Order cancellation emails the customer; the advance is refunded by staff in the Stripe dashboard. `PaymentStatus.REFUNDED` exists for when this is automated.
 - **Test-mode payments only.** The app is a public portfolio demo and never processes real cards.
-- **Coming next:** CI/CD via GitHub Actions (tests → deploy on green), the Terraform apply walkthrough, and S3-backed media.
+- **CI:** GitHub Actions runs the test suite against Postgres 16 and `terraform fmt` / `validate` on every push and pull request.
+- **Coming next:** deploy to Render automatically when CI is green.
 
 ---
 
@@ -165,6 +169,8 @@ apps/
   core/          SiteConfiguration, store hours/closures, banner slides, pickup-window logic, /healthz, seed
 templates/       Project-level templates
 static/          Tailwind source + compiled output.css (committed)
+terraform/       AWS reference architecture (VPC, ALB, Auto Scaling group, RDS)
+docs/aws-lab/    Screenshots from the verified AWS lab
 Dockerfile · docker-compose.yml · entrypoint.sh
-ARCHITECTURE.md  Business case, cloud design, Terraform
+ARCHITECTURE.md  Business case, live + AWS architecture, Terraform walkthrough
 ```

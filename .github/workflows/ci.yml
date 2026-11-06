@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Django tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: store
+          POSTGRES_PASSWORD: store
+          POSTGRES_DB: store
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U store -d store"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    # Only SECRET_KEY and DATABASE_URL are required by config/settings.py;
+    # everything else (Stripe keys, R2, email) has a safe default and Stripe is mocked.
+    env:
+      SECRET_KEY: ci-dummy-secret-key-not-used-anywhere-else
+      DATABASE_URL: postgres://store:store@localhost:5432/store
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # Tests run with DEBUG=False, so templates need the WhiteNoise manifest.
+      - name: Collect static files
+        run: python manage.py collectstatic --noinput
+
+      - name: Run tests
+        run: python manage.py test
+
+  terraform:
+    name: Terraform fmt & validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: hashicorp/setup-terraform@v4
+
+      - name: terraform fmt
+        run: terraform fmt -check -recursive
+
+      - name: terraform validate
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
